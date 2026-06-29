@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portfolio Coach</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0c10;
+      color: #e1e4e8;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      padding: 2.5rem 1rem 1.8rem;
+      background: linear-gradient(180deg, #0d1117 0%, #0a0c10 100%);
+      border-bottom: 1px solid #1b1f27;
+    }
+    .header h1 {
+      font-size: 2.2rem;
+      background: linear-gradient(135deg, #58a6ff, #bc8cff, #f778ba);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.4rem;
+      letter-spacing: -0.5px;
+    }
+    .header p { color: #6e7681; font-size: 0.95rem; }
+    .nav {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 1.2rem;
+      background: #161b22;
+      border-radius: 10px;
+      padding: 4px;
+      display: inline-flex;
+    }
+    .nav-btn {
+      padding: 0.5rem 1.4rem;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: #8b949e;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .nav-btn:hover { color: #e1e4e8; }
+    .nav-btn.active {
+      background: #21262d;
+      color: #e1e4e8;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    /* ── Form ── */
+    .form-container {
+      max-width: 560px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    .form-card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 16px;
+      padding: 2rem;
+    }
+    .form-group { margin-bottom: 1.2rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      color: #8b949e;
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 0.7rem 1rem;
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      color: #e1e4e8;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+    }
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: #58a6ff;
+      box-shadow: 0 0 0 3px rgba(88,166,255,0.1);
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    .btn {
+      width: 100%;
+      padding: 0.8rem;
+      background: linear-gradient(135deg, #238636, #2ea043);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 0.5rem;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(35,134,54,0.3); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* ── Loading ── */
+    .loading { display: none; text-align: center; padding: 4rem 1rem; }
+    .loading.active { display: block; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid #21262d;
+      border-top-color: #58a6ff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 1.2rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading p { color: #8b949e; font-size: 0.95rem; }
+    .loading .step { font-size: 0.85rem; margin-top: 0.5rem; color: #58a6ff; }
+
+    /* ── Results ── */
+    .results { display: none; max-width: 900px; margin: 2rem auto; padding: 0 1rem 3rem; }
+    .results.active { display: block; }
+
+    .section {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 1.2rem;
+    }
+    .section h2 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      color: #e1e4e8;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .summary-text { color: #c9d1d9; line-height: 1.7; font-size: 0.95rem; }
+    .strategy-text {
+      color: #8b949e;
+      font-style: italic;
+      margin-top: 0.8rem;
+      padding-top: 0.8rem;
+      border-top: 1px solid #1b1f27;
+      font-size: 0.9rem;
+    }
+
+    /* Tags */
+    .tags { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .tag {
+      padding: 0.3rem 0.7rem;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+    .tag.gap {
+      background: rgba(248, 81, 73, 0.1);
+      color: #f85149;
+      border: 1px solid rgba(248, 81, 73, 0.2);
+    }
+    .tag.match {
+      background: rgba(35, 134, 54, 0.1);
+      color: #3fb950;
+      border: 1px solid rgba(35, 134, 54, 0.2);
+    }
+
+    /* ── Project Cards (redesigned) ── */
+    .project-grid { display: grid; gap: 1rem; }
+    .project-card {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 14px;
+      overflow: hidden;
+      transition: all 0.25s;
+    }
+    .project-card:hover {
+      border-color: #30363d;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .project-main {
+      padding: 1.3rem;
+    }
+    .project-card h3 {
+      font-size: 1.05rem;
+      color: #e1e4e8;
+      margin-bottom: 0.5rem;
+    }
+    .project-card p {
+      color: #8b949e;
+      font-size: 0.88rem;
+      line-height: 1.6;
+      margin-bottom: 0.8rem;
+    }
+    .project-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.8rem;
+    }
+    .difficulty {
+      padding: 0.25rem 0.7rem;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .difficulty.beginner { background: rgba(35, 134, 54, 0.15); color: #3fb950; }
+    .difficulty.intermediate { background: rgba(210, 153, 34, 0.15); color: #d29922; }
+    .difficulty.advanced { background: rgba(248, 81, 73, 0.15); color: #f85149; }
+    .time-est {
+      padding: 0.25rem 0.7rem;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      background: rgba(88, 166, 255, 0.1);
+      color: #58a6ff;
+    }
+    .project-why {
+      font-size: 0.85rem;
+      color: #8b949e;
+      padding-top: 0.6rem;
+      border-top: 1px solid #1b1f27;
+      line-height: 1.5;
+    }
+    .tech-stack { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.6rem; }
+    .tech-tag {
+      padding: 0.2rem 0.5rem;
+      background: rgba(188, 140, 255, 0.08);
+      color: #bc8cff;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      border: 1px solid rgba(188, 140, 255, 0.15);
+    }
+
+    /* ── Resources Section (collapsible per project) ── */
+    .resources-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.8rem 1.3rem;
+      background: #0d1117;
+      border-top: 1px solid #1b1f27;
+      cursor: pointer;
+      transition: background 0.2s;
+      user-select: none;
+    }
+    .resources-toggle:hover { background: #161b22; }
+    .resources-toggle span {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #58a6ff;
+    }
+    .resources-toggle .arrow {
+      font-size: 0.75rem;
+      color: #58a6ff;
+      transition: transform 0.3s;
+    }
+    .resources-toggle.open .arrow { transform: rotate(180deg); }
+    .resources-panel {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease;
+      background: #0d1117;
+    }
+    .resources-panel.open { max-height: 600px; }
+    .resources-panel-inner { padding: 0 1.3rem 1.3rem; }
+    .resource-cards { display: grid; gap: 0.6rem; }
+    .resource-card {
+      display: flex;
+      gap: 0.8rem;
+      padding: 0.8rem;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.2s;
+    }
+    .resource-card:hover {
+      border-color: #30363d;
+      transform: translateX(4px);
+      background: #1c2128;
+    }
+    .resource-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .resource-icon.video { background: rgba(248, 81, 73, 0.15); }
+    .resource-icon.course { background: rgba(88, 166, 255, 0.15); }
+    .resource-icon.docs { background: rgba(35, 134, 54, 0.15); }
+    .resource-icon.tutorial { background: rgba(210, 153, 34, 0.15); }
+    .resource-icon.book { background: rgba(188, 140, 255, 0.15); }
+    .resource-info { flex: 1; min-width: 0; }
+    .resource-info .r-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #e1e4e8;
+      margin-bottom: 0.15rem;
+    }
+    .resource-info .r-meta {
+      font-size: 0.72rem;
+      color: #6e7681;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-bottom: 0.2rem;
+    }
+    .resource-info .r-meta .platform-badge {
+      padding: 0.1rem 0.4rem;
+      background: #21262d;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    .resource-info .r-why {
+      font-size: 0.78rem;
+      color: #8b949e;
+      line-height: 1.4;
+    }
+    .resource-arrow {
+      color: #30363d;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      transition: color 0.2s;
+    }
+    .resource-card:hover .resource-arrow { color: #58a6ff; }
+
+    /* ── Market section ── */
+    .jobs-list { list-style: none; }
+    .jobs-list li {
+      padding: 0.6rem 0;
+      border-bottom: 1px solid #1b1f27;
+      font-size: 0.88rem;
+      color: #c9d1d9;
+    }
+    .jobs-list li:last-child { border-bottom: none; }
+    .jobs-list .company { color: #6e7681; }
+
+    .model-badge {
+      padding: 0.2rem 0.6rem;
+      background: rgba(188, 140, 255, 0.1);
+      color: #bc8cff;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 500;
+    }
+
+    /* Error */
+    .error {
+      display: none;
+      max-width: 560px;
+      margin: 2rem auto;
+      padding: 1rem 1.5rem;
+      background: rgba(248, 81, 73, 0.08);
+      border: 1px solid rgba(248, 81, 73, 0.2);
+      border-radius: 12px;
+      color: #f85149;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+    .error.active { display: block; }
+
+    .back-btn {
+      background: none;
+      border: 1px solid #21262d;
+      color: #8b949e;
+      padding: 0.45rem 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      margin-bottom: 1.5rem;
+      transition: all 0.2s;
+    }
+    .back-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+    /* ── Tracker ── */
+    .tracker-container { display: none; max-width: 800px; margin: 2rem auto; padding: 0 1rem 3rem; }
+    .tracker-container.active { display: block; }
+    .alignment-bar {
+      width: 100%;
+      height: 6px;
+      background: #1b1f27;
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 0.5rem 0;
+    }
+    .alignment-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+    .insight-card {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 12px;
+      padding: 1.3rem;
+      margin-bottom: 1rem;
+    }
+    .insight-card .meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.8rem;
+    }
+    .insight-card .score { font-size: 1.4rem; font-weight: 700; }
+    .nudge-box {
+      background: rgba(88, 166, 255, 0.06);
+      border-left: 3px solid #58a6ff;
+      padding: 0.8rem 1rem;
+      border-radius: 0 8px 8px 0;
+      margin-top: 0.8rem;
+      font-size: 0.88rem;
+      color: #c9d1d9;
+      line-height: 1.5;
+    }
+    .tracked-user-card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 12px;
+      padding: 1.2rem;
+      margin-bottom: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tracked-user-card:hover { border-color: #30363d; }
+    .tracked-user-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .btn-sm {
+      padding: 0.4rem 0.8rem;
+      font-size: 0.78rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .btn-check { background: rgba(88, 166, 255, 0.1); color: #58a6ff; }
+    .btn-remove { background: rgba(248, 81, 73, 0.1); color: #f85149; margin-left: 0.5rem; }
+
+    /* ── Nudge Banner ── */
+    .nudge-banner {
+      display: none;
+      max-width: 560px;
+      margin: 1.5rem auto 0;
+      padding: 1rem 1.2rem;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .nudge-banner:hover { border-color: #30363d; }
+    .nudge-banner.active { display: block; }
+    .nudge-banner .banner-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .nudge-banner .banner-user { font-weight: 600; font-size: 0.9rem; }
+    .nudge-banner .banner-score { font-weight: 700; font-size: 1rem; }
+    .nudge-banner .banner-nudge { font-size: 0.85rem; color: #c9d1d9; line-height: 1.5; }
+    .nudge-banner .banner-bar {
+      width: 100%;
+      height: 4px;
+      background: #1b1f27;
+      border-radius: 2px;
+      margin-bottom: 0.6rem;
+      overflow: hidden;
+    }
+    .nudge-banner .banner-bar-fill { height: 100%; border-radius: 2px; }
+    .nudge-banner .banner-label { font-size: 0.72rem; color: #6e7681; margin-top: 0.4rem; }
+
+    @media (max-width: 600px) {
+      .form-row { grid-template-columns: 1fr; }
+      .header h1 { font-size: 1.8rem; }
+      .nav { display: flex; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Portfolio Coach</h1>
+    <p>Analyze your GitHub against real job market demands</p>
+    <div class="nav">
+      <button class="nav-btn active" onclick="switchTab('analyze')">Analyze</button>
+      <button class="nav-btn" onclick="switchTab('tracker')">Commit Tracker</button>
+    </div>
+  </div>
+
+  <!-- Nudge Banner -->
+  <div class="nudge-banner" id="nudgeBanner" onclick="switchTab('tracker')"></div>
+
+  <!-- Form -->
+  <div class="form-container" id="formSection">
+    <div class="form-card">
+      <form id="analyzeForm">
+        <div class="form-group">
+          <label>GitHub Username</label>
+          <input type="text" id="username" placeholder="e.g. torvalds" required>
+        </div>
+        <div class="form-group">
+          <label>Target Role</label>
+          <input type="text" id="role" placeholder="e.g. Backend Engineer" required>
+        </div>
+        <div class="form-group">
+          <label>Analysis Mode</label>
+          <select id="mode">
+            <option value="fast">Fast - Quick scan</option>
+            <option value="thorough">Thorough - Deep analysis with README parsing</option>
+          </select>
+        </div>
+        <button type="submit" class="btn" id="submitBtn">Analyze Portfolio</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" id="loadingSection">
+    <div class="spinner"></div>
+    <p>Analyzing your portfolio...</p>
+    <div class="step" id="loadingStep">Fetching GitHub profile</div>
+  </div>
+
+  <!-- Error -->
+  <div class="error" id="errorSection"></div>
+
+  <!-- Results -->
+  <div class="results" id="resultsSection">
+    <button class="back-btn" onclick="showForm()">&larr; New Analysis</button>
+
+    <!-- Summary -->
+    <div class="section">
+      <h2>Profile Summary <span class="model-badge" id="modelBadge"></span></h2>
+      <div class="summary-text" id="summaryText"></div>
+      <div class="strategy-text" id="strategyText"></div>
+    </div>
+
+    <!-- Skills -->
+    <div class="section">
+      <h2>Skill Analysis</h2>
+      <div style="margin-bottom: 1rem;">
+        <h3 style="font-size: 0.8rem; color: #3fb950; margin-bottom: 0.5rem; font-weight: 600;">MATCHED SKILLS</h3>
+        <div class="tags" id="matchedSkills"></div>
+      </div>
+      <div>
+        <h3 style="font-size: 0.8rem; color: #f85149; margin-bottom: 0.5rem; font-weight: 600;">SKILL GAPS</h3>
+        <div class="tags" id="skillGaps"></div>
+      </div>
+    </div>
+
+    <!-- Projects -->
+    <div class="section">
+      <h2>Recommended Projects</h2>
+      <div class="project-grid" id="projectGrid"></div>
+    </div>
+
+    <!-- Market Data -->
+    <div class="section">
+      <h2>Market Insights</h2>
+      <div style="margin-bottom: 1rem;">
+        <h3 style="font-size: 0.8rem; color: #8b949e; margin-bottom: 0.5rem; font-weight: 600;">IN-DEMAND SKILLS</h3>
+        <div class="tags" id="marketSkills"></div>
+      </div>
+      <div style="margin-bottom: 1rem;">
+        <h3 style="font-size: 0.8rem; color: #8b949e; margin-bottom: 0.5rem; font-weight: 600;">TRENDING TOOLS</h3>
+        <div class="tags" id="trendingTools"></div>
+      </div>
+      <div id="sampleJobsSection">
+        <h3 style="font-size: 0.8rem; color: #8b949e; margin-bottom: 0.5rem; font-weight: 600;">SAMPLE JOB POSTINGS</h3>
+        <ul class="jobs-list" id="sampleJobs"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tracker Section -->
+  <div class="tracker-container" id="trackerSection">
+    <div class="form-card" style="margin-bottom: 1.5rem;">
+      <h2 style="margin-bottom: 0.6rem; font-size: 1.1rem;">Track Your Commits</h2>
+      <p style="color: #6e7681; font-size: 0.85rem; margin-bottom: 1rem;">
+        Get ongoing feedback on whether your commits align with your target role's market demands.
+      </p>
+      <form id="trackerForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>GitHub Username</label>
+            <input type="text" id="trackerUsername" placeholder="e.g. torvalds" required>
+          </div>
+          <div class="form-group">
+            <label>Target Role</label>
+            <input type="text" id="trackerRole" placeholder="e.g. AI Engineer" required>
+          </div>
+        </div>
+        <button type="submit" class="btn" id="trackerBtn">Start Tracking</button>
+      </form>
+    </div>
+
+    <div class="loading" id="trackerLoading">
+      <div class="spinner"></div>
+      <p>Analyzing recent commits...</p>
+    </div>
+
+    <div id="trackedUsersList"></div>
+    <div id="insightDetail" style="display:none;"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('analyzeForm');
+    const formSection = document.getElementById('formSection');
+    const loadingSection = document.getElementById('loadingSection');
+    const errorSection = document.getElementById('errorSection');
+    const resultsSection = document.getElementById('resultsSection');
+    const loadingStep = document.getElementById('loadingStep');
+
+    const steps = [
+      'Fetching GitHub profile...',
+      'Scanning job market...',
+      'Identifying skill gaps...',
+      'Finding learning resources...',
+      'Generating project recommendations...',
+    ];
+
+    const RESOURCE_ICONS = {
+      video: '&#9654;',
+      course: '&#127891;',
+      docs: '&#128196;',
+      tutorial: '&#128187;',
+      book: '&#128214;',
+    };
+
+    function showForm() {
+      formSection.style.display = 'block';
+      loadingSection.classList.remove('active');
+      errorSection.classList.remove('active');
+      resultsSection.classList.remove('active');
+    }
+
+    function showLoading() {
+      formSection.style.display = 'none';
+      errorSection.classList.remove('active');
+      resultsSection.classList.remove('active');
+      loadingSection.classList.add('active');
+
+      let i = 0;
+      const interval = setInterval(() => {
+        i = (i + 1) % steps.length;
+        loadingStep.textContent = steps[i];
+      }, 2500);
+      return interval;
+    }
+
+    function showError(msg) {
+      loadingSection.classList.remove('active');
+      errorSection.textContent = msg;
+      errorSection.classList.add('active');
+      formSection.style.display = 'block';
+    }
+
+    function toggleResources(btn) {
+      btn.classList.toggle('open');
+      const panel = btn.nextElementSibling;
+      panel.classList.toggle('open');
+    }
+
+    function buildSearchUrl(title, platform) {
+      const q = encodeURIComponent(title);
+      const p = (platform || '').toLowerCase();
+      if (p.includes('youtube')) return `https://www.youtube.com/results?search_query=${q}`;
+      if (p.includes('coursera')) return `https://www.coursera.org/search?query=${q}`;
+      if (p.includes('udemy')) return `https://www.udemy.com/courses/search/?q=${q}`;
+      if (p.includes('freecodecamp')) return `https://www.freecodecamp.org/news/search/?query=${q}`;
+      if (p.includes('mdn') || p.includes('mozilla')) return `https://developer.mozilla.org/en-US/search?q=${q}`;
+      if (p.includes('docs') || p.includes('official')) return `https://www.google.com/search?q=${q}+official+documentation`;
+      return `https://www.google.com/search?q=${q}`;
+    }
+
+    function renderResourceCard(r) {
+      const type = (r.type || 'tutorial').toLowerCase();
+      const icon = RESOURCE_ICONS[type] || RESOURCE_ICONS.tutorial;
+      const url = buildSearchUrl(r.title, r.platform);
+
+      return `
+        <a class="resource-card" href="${esc(url)}" target="_blank" rel="noopener">
+          <div class="resource-icon ${type}">${icon}</div>
+          <div class="resource-info">
+            <div class="r-title">${esc(r.title)}</div>
+            <div class="r-meta">
+              <span class="platform-badge">${esc(r.platform || type)}</span>
+              <span>${esc(type)}</span>
+            </div>
+            ${r.why ? `<div class="r-why">${esc(r.why)}</div>` : ''}
+          </div>
+          <div class="resource-arrow">&#8250;</div>
+        </a>
+      `;
+    }
+
+    function showResults(data) {
+      loadingSection.classList.remove('active');
+      resultsSection.classList.add('active');
+
+      document.getElementById('modelBadge').textContent = data.model_used || '';
+      document.getElementById('summaryText').textContent = data.profile_summary || 'No summary available.';
+      document.getElementById('strategyText').textContent = data.overall_strategy || '';
+
+      document.getElementById('matchedSkills').innerHTML = (data.matched_skills || [])
+        .map(s => `<span class="tag match">${esc(s)}</span>`).join('');
+
+      document.getElementById('skillGaps').innerHTML = (data.skill_gaps || [])
+        .map(s => `<span class="tag gap">${esc(s)}</span>`).join('');
+
+      // Projects with resources
+      const grid = document.getElementById('projectGrid');
+      grid.innerHTML = (data.projects || []).map((p, i) => {
+        const resources = p.resources || [];
+        const hasResources = resources.length > 0;
+
+        return `
+          <div class="project-card">
+            <div class="project-main">
+              <div class="project-meta">
+                <span class="difficulty ${(p.difficulty || '').toLowerCase()}">${esc(p.difficulty)}</span>
+                ${p.build_time_estimate ? `<span class="time-est">${esc(p.build_time_estimate)}</span>` : ''}
+              </div>
+              <h3>${esc(p.title)}</h3>
+              <p>${esc(p.description)}</p>
+              <div class="tech-stack">
+                ${(p.tech_stack || []).map(t => `<span class="tech-tag">${esc(t)}</span>`).join('')}
+              </div>
+              ${p.why ? `<div class="project-why">${esc(p.why)}</div>` : ''}
+            </div>
+            ${hasResources ? `
+              <div class="resources-toggle" onclick="toggleResources(this)">
+                <span>Learning Resources (${resources.length})</span>
+                <span class="arrow">&#9660;</span>
+              </div>
+              <div class="resources-panel">
+                <div class="resources-panel-inner">
+                  <div class="resource-cards">
+                    ${resources.map(renderResourceCard).join('')}
+                  </div>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+
+      // Market data
+      document.getElementById('marketSkills').innerHTML =
+        (data.market_data?.market_skills || []).map(s => `<span class="tag match">${esc(s)}</span>`).join('');
+
+      document.getElementById('trendingTools').innerHTML =
+        (data.market_data?.trending_tools || []).map(s => `<span class="tag" style="background:rgba(88,166,255,0.08);color:#58a6ff;border:1px solid rgba(88,166,255,0.15)">${esc(s)}</span>`).join('');
+
+      const jobsList = document.getElementById('sampleJobs');
+      const jobs = data.market_data?.sample_jobs || [];
+      if (jobs.length) {
+        document.getElementById('sampleJobsSection').style.display = '';
+        jobsList.innerHTML = jobs.map(j => `
+          <li><strong>${esc(j.title)}</strong> <span class="company">at ${esc(j.company)}</span>
+          ${j.key_skills?.length ? `<br><small style="color:#6e7681">${j.key_skills.map(esc).join(', ')}</small>` : ''}
+          </li>
+        `).join('');
+      } else {
+        document.getElementById('sampleJobsSection').style.display = 'none';
+      }
+    }
+
+    function esc(str) {
+      if (!str) return '';
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    // ── Tab switching ──
+    function switchTab(tab) {
+      document.querySelectorAll('.nav-btn').forEach((b, i) => {
+        b.classList.toggle('active', (tab === 'analyze' && i === 0) || (tab === 'tracker' && i === 1));
+      });
+
+      formSection.style.display = 'none';
+      resultsSection.classList.remove('active');
+      loadingSection.classList.remove('active');
+      errorSection.classList.remove('active');
+      document.getElementById('trackerSection').classList.remove('active');
+
+      if (tab === 'analyze') {
+        formSection.style.display = 'block';
+      } else {
+        document.getElementById('trackerSection').classList.add('active');
+        document.getElementById('insightDetail').style.display = 'none';
+        document.getElementById('trackedUsersList').style.display = '';
+        loadTrackedUsers();
+      }
+    }
+
+    // ── Tracker ──
+    const trackerForm = document.getElementById('trackerForm');
+    const trackerLoading = document.getElementById('trackerLoading');
+
+    async function loadTrackedUsers() {
+      try {
+        const res = await fetch('/api/tracker');
+        const data = await res.json();
+        renderTrackedUsers(data.users || []);
+      } catch (e) {
+        console.error('Failed to load tracked users', e);
+      }
+    }
+
+    function renderTrackedUsers(users) {
+      const el = document.getElementById('trackedUsersList');
+      if (!users.length) {
+        el.innerHTML = '<p style="color:#6e7681;text-align:center;padding:2rem;">No users being tracked yet. Register above to start.</p>';
+        return;
+      }
+      el.innerHTML = users.map(u => {
+        const latest = u.insights?.[0];
+        const score = latest?.alignment_score;
+        const scoreColor = score >= 0.7 ? '#3fb950' : score >= 0.4 ? '#d29922' : '#f85149';
+        const scoreText = score != null ? `${Math.round(score * 100)}%` : '--';
+        const checked = u.last_checked ? new Date(u.last_checked).toLocaleDateString() : 'Never';
+
+        return `
+          <div class="tracked-user-card" onclick="showUserInsights('${esc(u.username)}')">
+            <div class="tracked-user-header">
+              <div>
+                <strong style="font-size:1.05rem;">${esc(u.username)}</strong>
+                <span style="color:#6e7681;margin-left:0.5rem;">${esc(u.target_role)}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.5rem;">
+                ${score != null ? `<span style="color:${scoreColor};font-weight:700;font-size:1.1rem;">${scoreText}</span>` : ''}
+                <button class="btn-sm btn-check" onclick="event.stopPropagation();recheckUser('${esc(u.username)}')">Re-check</button>
+                <button class="btn-sm btn-remove" onclick="event.stopPropagation();removeUser('${esc(u.username)}')">Remove</button>
+              </div>
+            </div>
+            ${latest ? `
+              <div class="alignment-bar">
+                <div class="alignment-fill" style="width:${Math.round(score*100)}%;background:${scoreColor};"></div>
+              </div>
+              <div class="nudge-box">${esc(latest.nudge)}</div>
+              <div style="margin-top:0.5rem;font-size:0.78rem;color:#6e7681;">
+                ${latest.commit_count} commits analyzed &middot; Last checked: ${checked}
+              </div>
+            ` : `<div style="color:#6e7681;font-size:0.85rem;margin-top:0.5rem;">No insights yet</div>`}
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function showUserInsights(username) {
+      try {
+        const res = await fetch(`/api/tracker/${username}`);
+        const data = await res.json();
+        const detail = document.getElementById('insightDetail');
+        const insights = data.insights || [];
+
+        if (!insights.length) {
+          detail.innerHTML = '<p style="color:#6e7681;">No insights yet.</p>';
+          detail.style.display = 'block';
+          return;
+        }
+
+        detail.innerHTML = `
+          <button class="back-btn" onclick="document.getElementById('insightDetail').style.display='none';document.getElementById('trackedUsersList').style.display=''">&larr; Back</button>
+          <h2 style="margin-bottom:1rem;">${esc(data.username)} &middot; ${esc(data.target_role)}</h2>
+          ${insights.map(ins => {
+            const sc = ins.alignment_score;
+            const col = sc >= 0.7 ? '#3fb950' : sc >= 0.4 ? '#d29922' : '#f85149';
+            const date = new Date(ins.checked_at).toLocaleString();
+            return `
+              <div class="insight-card">
+                <div class="meta">
+                  <span style="color:#6e7681;font-size:0.85rem;">${date} &middot; ${ins.commit_count} commits</span>
+                  <span class="score" style="color:${col};">${Math.round(sc*100)}%</span>
+                </div>
+                <div class="alignment-bar">
+                  <div class="alignment-fill" style="width:${Math.round(sc*100)}%;background:${col};"></div>
+                </div>
+                <p style="font-size:0.88rem;color:#c9d1d9;margin:0.8rem 0;">${esc(ins.recent_focus)}</p>
+                <div style="margin-bottom:0.6rem;">
+                  <h4 style="font-size:0.78rem;color:#3fb950;margin-bottom:0.3rem;font-weight:600;">ALIGNED</h4>
+                  <div class="tags">${(ins.aligned_areas||[]).map(a => `<span class="tag match">${esc(a)}</span>`).join('')}</div>
+                </div>
+                <div style="margin-bottom:0.6rem;">
+                  <h4 style="font-size:0.78rem;color:#f85149;margin-bottom:0.3rem;font-weight:600;">GAPS</h4>
+                  <div class="tags">${(ins.gaps||[]).map(g => `<span class="tag gap">${esc(g)}</span>`).join('')}</div>
+                </div>
+                <div class="nudge-box">${esc(ins.nudge)}</div>
+              </div>
+            `;
+          }).join('')}
+        `;
+        detail.style.display = 'block';
+        document.getElementById('trackedUsersList').style.display = 'none';
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function recheckUser(username) {
+      trackerLoading.classList.add('active');
+      try {
+        await fetch(`/api/tracker/${username}/check`, { method: 'POST' });
+        await loadTrackedUsers();
+      } catch (e) {
+        console.error(e);
+      }
+      trackerLoading.classList.remove('active');
+    }
+
+    async function removeUser(username) {
+      try {
+        await fetch(`/api/tracker/${username}`, { method: 'DELETE' });
+        await loadTrackedUsers();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    trackerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('trackerUsername').value.trim();
+      const role = document.getElementById('trackerRole').value.trim();
+      if (!username || !role) return;
+
+      trackerLoading.classList.add('active');
+      try {
+        const res = await fetch(`/api/tracker/register?username=${encodeURIComponent(username)}&target_role=${encodeURIComponent(role)}`, {
+          method: 'POST',
+        });
+        if (!res.ok) throw new Error('Registration failed');
+        await loadTrackedUsers();
+        document.getElementById('trackerUsername').value = '';
+        document.getElementById('trackerRole').value = '';
+      } catch (e) {
+        console.error(e);
+      }
+      trackerLoading.classList.remove('active');
+    });
+
+    // ── Analyze form ──
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const role = document.getElementById('role').value.trim();
+      const mode = document.getElementById('mode').value;
+
+      if (!username || !role) return;
+
+      const interval = showLoading();
+
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ github_username: username, target_role: role, mode }),
+        });
+
+        clearInterval(interval);
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `Request failed (${res.status})`);
+        }
+
+        const data = await res.json();
+        showResults(data);
+      } catch (err) {
+        clearInterval(interval);
+        showError(err.message);
+      }
+    });
+
+    // ── Auto-load nudge banner on page load ──
+    async function loadNudgeBanner() {
+      try {
+        const res = await fetch('/api/tracker');
+        const data = await res.json();
+        const users = data.users || [];
+
+        const tracked = users.find(u => u.insights?.length > 0);
+        if (!tracked) return;
+
+        const latest = tracked.insights[0];
+        const score = latest.alignment_score;
+        const color = score >= 0.7 ? '#3fb950' : score >= 0.4 ? '#d29922' : '#f85149';
+        const pct = Math.round(score * 100);
+
+        const banner = document.getElementById('nudgeBanner');
+        banner.innerHTML = `
+          <div class="banner-header">
+            <span class="banner-user">${esc(tracked.username)} &middot; ${esc(tracked.target_role)}</span>
+            <span class="banner-score" style="color:${color}">${pct}% aligned</span>
+          </div>
+          <div class="banner-bar">
+            <div class="banner-bar-fill" style="width:${pct}%;background:${color};"></div>
+          </div>
+          <div class="banner-nudge">${esc(latest.nudge)}</div>
+          <div class="banner-label">Click to view full tracking details</div>
+        `;
+        banner.classList.add('active');
+      } catch (e) {}
+    }
+
+    loadNudgeBanner();
+  </script>
+</body>
+</html>

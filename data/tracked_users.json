@@ -1,0 +1,36 @@
+{
+  "users": {
+    "tieahapani": {
+      "username": "Tieahapani",
+      "target_role": "AI Engineer",
+      "registered_at": "2026-06-28T23:29:56.220101+00:00",
+      "last_checked": "2026-06-28T23:35:39.555820+00:00",
+      "insights": [
+        {
+          "alignment_score": 0.2,
+          "aligned_areas": [
+            "Python"
+          ],
+          "gaps": [
+            "Machine Learning",
+            "Deep Learning",
+            "TensorFlow",
+            "PyTorch",
+            "Natural Language Processing",
+            "Data Analysis",
+            "Cloud Computing",
+            "SQL",
+            "Data Visualization",
+            "Computer Vision",
+            "Statistics",
+            "Big Data"
+          ],
+          "nudge": "Consider contributing to projects that involve machine learning or deep learning frameworks like TensorFlow or PyTorch. Additionally, building projects that utilize data analysis or natural language processing can strengthen your profile as an AI Engineer.",
+          "recent_focus": "They have been working on enhancing a portfolio site and a travel management app, focusing on UI features.",
+          "checked_at": "2026-06-28T23:35:39.555820+00:00",
+          "commit_count": 4
+        }
+      ]
+    }
+  }
+}
