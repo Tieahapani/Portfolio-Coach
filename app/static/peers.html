@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Find Peers — Portfolio Coach</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #fafaf8;
+      --surface: #ffffff;
+      --surface-alt: #f3f2ef;
+      --border: #e8e6e1;
+      --border-light: #f0eeea;
+      --text: #2c2c2c;
+      --text-secondary: #6b6b6b;
+      --text-muted: #9a9a9a;
+      --accent: #6b7c6e;
+      --accent-light: rgba(107, 124, 110, 0.08);
+      --accent-border: rgba(107, 124, 110, 0.18);
+      --warm: #a89880;
+      --warm-light: rgba(168, 152, 128, 0.08);
+      --warm-border: rgba(168, 152, 128, 0.2);
+      --gap-bg: rgba(180, 120, 100, 0.06);
+      --gap-color: #9e6e58;
+      --gap-border: rgba(180, 120, 100, 0.15);
+      --match-bg: rgba(107, 124, 110, 0.06);
+      --match-color: #5a7a5e;
+      --match-border: rgba(107, 124, 110, 0.15);
+      --radius: 14px;
+      --radius-sm: 10px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+      --shadow: 0 2px 8px rgba(0,0,0,0.06);
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,600&display=swap');
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Nav ── */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.5rem 2rem;
+    }
+    .logo {
+      font-family: 'Fraunces', serif;
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: -0.3px;
+    }
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+    .nav-links a {
+      text-decoration: none;
+      color: var(--text-secondary);
+      font-size: 0.88rem;
+      font-weight: 500;
+      transition: color 0.2s;
+      letter-spacing: 0.2px;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--text); }
+
+    /* ── Page Header ── */
+    .page-header {
+      max-width: 760px;
+      margin: 3rem auto 2rem;
+      padding: 0 2rem;
+    }
+    .page-header h1 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.8rem;
+      font-weight: 400;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.4rem;
+    }
+    .page-header p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+    .pool-stat {
+      display: inline-block;
+      margin-top: 0.8rem;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      background: var(--surface-alt);
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+    }
+
+    /* ── Search Form ── */
+    .search-container {
+      max-width: 760px;
+      margin: 0 auto 2rem;
+      padding: 0 2rem;
+    }
+    .search-card {
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 1.5rem 2rem;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-end;
+    }
+    .search-card .form-group {
+      flex: 1;
+    }
+    .form-group label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 0.92rem;
+      font-family: var(--font);
+      transition: all 0.2s;
+    }
+    .form-group input::placeholder { color: var(--text-muted); }
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--text-muted);
+      box-shadow: 0 0 0 3px rgba(0,0,0,0.03);
+    }
+    .btn {
+      padding: 0.75rem 1.5rem;
+      background: var(--text);
+      color: var(--bg);
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.92rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: var(--font);
+      white-space: nowrap;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Loading ── */
+    .loading { display: none; text-align: center; padding: 4rem 1rem; }
+    .loading.active { display: block; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 2px solid var(--border);
+      border-top-color: var(--text-secondary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading p { color: var(--text-secondary); font-size: 0.9rem; }
+    .loading .step { font-size: 0.82rem; margin-top: 0.5rem; color: var(--text-muted); }
+
+    /* ── Error / Info ── */
+    .message {
+      display: none;
+      max-width: 760px;
+      margin: 0 auto 1.5rem;
+      padding: 1rem 1.5rem;
+      border-radius: var(--radius-sm);
+      text-align: center;
+      font-size: 0.88rem;
+    }
+    .message.active { display: block; }
+    .message.error {
+      background: var(--gap-bg);
+      border: 1px solid var(--gap-border);
+      color: var(--gap-color);
+    }
+    .message.info {
+      background: var(--accent-light);
+      border: 1px solid var(--accent-border);
+      color: var(--accent);
+    }
+
+    /* ── Results ── */
+    .results {
+      display: none;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 0 2rem 4rem;
+    }
+    .results.active { display: block; }
+
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .results-header h2 {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-secondary);
+    }
+    .results-count {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* ── Peer Card ── */
+    .peer-card {
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 1.8rem;
+      margin-bottom: 1.2rem;
+      transition: all 0.25s;
+    }
+    .peer-card:hover {
+      border-color: var(--border);
+      box-shadow: var(--shadow);
+    }
+    .peer-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+    }
+    .peer-identity h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+      margin-bottom: 0.2rem;
+    }
+    .peer-identity .peer-role {
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+    }
+    .similarity-badge {
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      background: var(--match-bg);
+      color: var(--match-color);
+      border: 1px solid var(--match-border);
+    }
+    .collab-badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      background: var(--warm-light);
+      color: var(--warm);
+      border: 1px solid var(--warm-border);
+      margin-left: 0.5rem;
+    }
+
+    .match-reason {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.65;
+      margin-bottom: 1rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .peer-details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .detail-group {
+      min-width: 0;
+    }
+    .tag-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .tag {
+      padding: 0.25rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 500;
+    }
+    .tag.match {
+      background: var(--match-bg);
+      color: var(--match-color);
+      border: 1px solid var(--match-border);
+    }
+    .tag.gap {
+      background: var(--gap-bg);
+      color: var(--gap-color);
+      border: 1px solid var(--gap-border);
+    }
+    .tag.shared {
+      background: var(--accent-light);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+    }
+    .tag.complement {
+      background: var(--warm-light);
+      color: var(--warm);
+      border: 1px solid var(--warm-border);
+    }
+
+    /* ── Suggested Project ── */
+    .suggested-project {
+      background: var(--bg);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-sm);
+      padding: 1.2rem;
+      margin-bottom: 1rem;
+    }
+    .suggested-project .sp-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    .suggested-project h4 {
+      font-size: 0.92rem;
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+    }
+    .suggested-project p {
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 0.5rem;
+    }
+    .tech-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+    }
+    .tech-tag {
+      padding: 0.2rem 0.5rem;
+      background: var(--surface-alt);
+      color: var(--text-secondary);
+      border-radius: 6px;
+      font-size: 0.7rem;
+      border: 1px solid var(--border-light);
+    }
+
+    /* ── Contact Links ── */
+    .peer-actions {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border-light);
+    }
+    .contact-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+      font-family: var(--font);
+    }
+    .contact-link.github {
+      background: var(--surface-alt);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .contact-link.github:hover { border-color: var(--text-muted); }
+    .contact-link.linkedin {
+      background: rgba(10, 102, 194, 0.06);
+      color: #0a66c2;
+      border: 1px solid rgba(10, 102, 194, 0.15);
+    }
+    .contact-link.linkedin:hover { background: rgba(10, 102, 194, 0.1); }
+    .contact-link.discord {
+      background: rgba(88, 101, 242, 0.06);
+      color: #5865f2;
+      border: 1px solid rgba(88, 101, 242, 0.15);
+    }
+    .contact-link.discord:hover { background: rgba(88, 101, 242, 0.1); }
+
+    .projects-text {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+      font-style: italic;
+    }
+
+    @media (max-width: 600px) {
+      .search-card { flex-direction: column; }
+      .peer-details { grid-template-columns: 1fr; }
+      .page-header h1 { font-size: 1.5rem; }
+      nav { padding: 1rem 1.2rem; }
+      .nav-links { gap: 1.2rem; }
+      .peer-top { flex-direction: column; gap: 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="/" class="logo">Portfolio Coach</a>
+    <div class="nav-links">
+      <a href="/analyze">Analyze</a>
+      <a href="/tracker">Tracker</a>
+      <a href="/peers" class="active">Peers</a>
+    </div>
+  </nav>
+
+  <div class="page-header">
+    <h1>Find Peers</h1>
+    <p>Connect with developers who share your goals, complement your skills, or are working on similar problems. Reach out via GitHub, LinkedIn, or Discord.</p>
+    <div class="pool-stat" id="poolStat"></div>
+  </div>
+
+  <div class="search-container">
+    <div class="search-card">
+      <div class="form-group">
+        <label>Your GitHub Username</label>
+        <input type="text" id="searchUsername" placeholder="Enter your GitHub username" required>
+      </div>
+      <button class="btn" id="searchBtn" onclick="searchPeers()">Find Peers</button>
+    </div>
+  </div>
+
+  <div class="message" id="messageBox"></div>
+
+  <div class="loading" id="loadingSection">
+    <div class="spinner"></div>
+    <p>Finding your best matches...</p>
+    <div class="step" id="loadingStep">Searching the peer pool</div>
+  </div>
+
+  <div class="results" id="resultsSection"></div>
+
+  <script>
+    const loadingSection = document.getElementById('loadingSection');
+    const loadingStep = document.getElementById('loadingStep');
+    const resultsSection = document.getElementById('resultsSection');
+    const messageBox = document.getElementById('messageBox');
+
+    const matchSteps = [
+      'Embedding your profile...',
+      'Searching the peer pool...',
+      'Analyzing compatibility...',
+      'Generating collaboration ideas...',
+    ];
+
+    function esc(str) {
+      if (!str) return '';
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function isLinkedIn(contact) {
+      return contact && contact.toLowerCase().includes('linkedin.com');
+    }
+
+    function isDiscord(contact) {
+      return contact && (contact.includes('#') || contact.toLowerCase().includes('discord'));
+    }
+
+    function renderContactLinks(username, contact) {
+      let links = `<a class="contact-link github" href="https://github.com/${esc(username)}" target="_blank" rel="noopener">GitHub</a>`;
+
+      if (isLinkedIn(contact)) {
+        const url = contact.startsWith('http') ? contact : `https://${contact}`;
+        links += `<a class="contact-link linkedin" href="${esc(url)}" target="_blank" rel="noopener">LinkedIn</a>`;
+      } else if (isDiscord(contact)) {
+        links += `<span class="contact-link discord">${esc(contact)}</span>`;
+      } else if (contact) {
+        if (contact.startsWith('http')) {
+          links += `<a class="contact-link linkedin" href="${esc(contact)}" target="_blank" rel="noopener">Profile</a>`;
+        } else {
+          links += `<span class="contact-link discord">${esc(contact)}</span>`;
+        }
+      }
+
+      return links;
+    }
+
+    function showMessage(text, type) {
+      messageBox.textContent = text;
+      messageBox.className = `message active ${type}`;
+    }
+
+    function hideMessage() {
+      messageBox.className = 'message';
+    }
+
+    async function loadPoolSize() {
+      try {
+        const res = await fetch('/api/peers');
+        const data = await res.json();
+        const el = document.getElementById('poolStat');
+        el.textContent = `${data.pool_size} developer${data.pool_size !== 1 ? 's' : ''} in the pool`;
+      } catch (e) {}
+    }
+
+    async function searchPeers() {
+      const username = document.getElementById('searchUsername').value.trim();
+      if (!username) return;
+
+      hideMessage();
+      resultsSection.classList.remove('active');
+      loadingSection.classList.add('active');
+
+      let i = 0;
+      const interval = setInterval(() => {
+        i = (i + 1) % matchSteps.length;
+        loadingStep.textContent = matchSteps[i];
+      }, 2000);
+
+      try {
+        const res = await fetch(`/api/peers/match/${encodeURIComponent(username)}`);
+        clearInterval(interval);
+        loadingSection.classList.remove('active');
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showMessage(err.detail || 'Failed to find peers. Have you run an analysis first?', 'error');
+          return;
+        }
+
+        const data = await res.json();
+        renderResults(data);
+      } catch (err) {
+        clearInterval(interval);
+        loadingSection.classList.remove('active');
+        showMessage(err.message, 'error');
+      }
+    }
+
+    function renderResults(data) {
+      const matches = data.matches || [];
+      if (!matches.length) {
+        showMessage('No peers found yet. The pool is still growing — check back soon!', 'info');
+        return;
+      }
+
+      resultsSection.innerHTML = `
+        <div class="results-header">
+          <h2>Your Matches</h2>
+          <span class="results-count">${matches.length} peer${matches.length !== 1 ? 's' : ''} found</span>
+        </div>
+        ${matches.map(m => {
+          const sp = m.suggested_project || {};
+          const simPct = Math.round((m.similarity_score || 0) * 100);
+
+          return `
+            <div class="peer-card">
+              <div class="peer-top">
+                <div class="peer-identity">
+                  <h3>${esc(m.github_username)}
+                    <span class="collab-badge">${esc(m.collaboration_type || 'co-builder')}</span>
+                  </h3>
+                  <div class="peer-role">${esc(m.target_role)}</div>
+                </div>
+                <span class="similarity-badge">${simPct}% match</span>
+              </div>
+
+              <div class="match-reason">${esc(m.match_reason)}</div>
+
+              <div class="peer-details">
+                ${m.shared_interests?.length ? `
+                  <div class="detail-group">
+                    <div class="tag-label">Shared Interests</div>
+                    <div class="tags">${m.shared_interests.map(s => `<span class="tag shared">${esc(s)}</span>`).join('')}</div>
+                  </div>
+                ` : ''}
+                ${m.complementary_skills?.length ? `
+                  <div class="detail-group">
+                    <div class="tag-label">Complementary Skills</div>
+                    <div class="tags">${m.complementary_skills.map(s => `<span class="tag complement">${esc(s)}</span>`).join('')}</div>
+                  </div>
+                ` : ''}
+                ${m.languages?.length ? `
+                  <div class="detail-group">
+                    <div class="tag-label">Languages</div>
+                    <div class="tags">${m.languages.map(s => `<span class="tag match">${esc(s)}</span>`).join('')}</div>
+                  </div>
+                ` : ''}
+                ${m.skill_gaps?.length ? `
+                  <div class="detail-group">
+                    <div class="tag-label">Their Gaps</div>
+                    <div class="tags">${m.skill_gaps.map(s => `<span class="tag gap">${esc(s)}</span>`).join('')}</div>
+                  </div>
+                ` : ''}
+              </div>
+
+              ${sp.title ? `
+                <div class="suggested-project">
+                  <div class="sp-label">Suggested Collaboration</div>
+                  <h4>${esc(sp.title)}</h4>
+                  <p>${esc(sp.description)}</p>
+                  ${sp.tech_stack?.length ? `
+                    <div class="tech-tags">${sp.tech_stack.map(t => `<span class="tech-tag">${esc(t)}</span>`).join('')}</div>
+                  ` : ''}
+                </div>
+              ` : ''}
+
+              ${m.current_projects ? `<div class="projects-text">Currently working on: ${esc(m.current_projects)}</div>` : ''}
+
+              <div class="peer-actions">
+                ${renderContactLinks(m.github_username, m.contact)}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      `;
+      resultsSection.classList.add('active');
+    }
+
+    // Allow Enter key in search input
+    document.getElementById('searchUsername').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); searchPeers(); }
+    });
+
+    loadPoolSize();
+  </script>
+</body>
+</html>

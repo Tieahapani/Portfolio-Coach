@@ -4,8 +4,30 @@
       "username": "Tieahapani",
       "target_role": "AI Engineer",
       "registered_at": "2026-06-28T23:29:56.220101+00:00",
-      "last_checked": "2026-06-28T23:35:39.555820+00:00",
+      "last_checked": "2026-06-29T17:27:02.327242+00:00",
       "insights": [
+        {
+          "alignment_score": 0.2,
+          "aligned_areas": [
+            "Proficiency in Python"
+          ],
+          "gaps": [
+            "Machine Learning",
+            "Deep Learning",
+            "Natural Language Processing",
+            "Data Analysis",
+            "TensorFlow",
+            "PyTorch",
+            "SQL",
+            "Cloud Computing",
+            "Big Data",
+            "Computer Vision"
+          ],
+          "nudge": "Focus on building projects that incorporate machine learning frameworks like TensorFlow or PyTorch, and consider contributing to open-source AI projects to enhance your portfolio.",
+          "recent_focus": "They have been working on a portfolio site and a travel management app, primarily enhancing UI features.",
+          "checked_at": "2026-06-29T17:27:02.327242+00:00",
+          "commit_count": 4
+        },
         {
           "alignment_score": 0.2,
           "aligned_areas": [

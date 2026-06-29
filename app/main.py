@@ -22,6 +22,8 @@ from app.services.tracker import (
     register_user, unregister_user, get_tracked_users,
     get_user_insights, check_user, run_tracker_cycle,
 )
+from app.services.peer_matching import register_peer, find_peers
+from app.services.peer_db import get_peer, get_peer_count
 
 
 @asynccontextmanager
@@ -84,6 +86,21 @@ STATIC_DIR = Path(__file__).parent / "static"
 @app.get("/", response_class=FileResponse)
 async def index():
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/analyze", response_class=FileResponse)
+async def analyze_page():
+    return FileResponse(STATIC_DIR / "analyze.html")
+
+
+@app.get("/tracker", response_class=FileResponse)
+async def tracker_page():
+    return FileResponse(STATIC_DIR / "tracker.html")
+
+
+@app.get("/peers", response_class=FileResponse)
+async def peers_page():
+    return FileResponse(STATIC_DIR / "peers.html")
 
 
 # ── Health ──
@@ -226,6 +243,51 @@ async def tracker_check_now(username: str):
     if not insight:
         raise HTTPException(status_code=404, detail="User not tracked or check failed")
     return insight
+
+
+# ── Peers ──
+
+@app.post("/api/peers/register")
+async def peer_register(req: dict):
+    """Register or update a peer profile (called automatically after analysis)."""
+    try:
+        peer = await register_peer(
+            github_username=req["github_username"],
+            target_role=req["target_role"],
+            contact=req["contact"],
+            current_projects=req.get("current_projects", ""),
+            matched_skills=req.get("matched_skills", []),
+            skill_gaps=req.get("skill_gaps", []),
+            languages=req.get("languages", []),
+            frameworks=req.get("frameworks", []),
+        )
+        return {"status": "registered", "peer": peer}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Peer registration failed: {e}")
+
+
+@app.get("/api/peers/match/{username}")
+async def peer_match(username: str):
+    """Find matching peers for a user."""
+    result = await find_peers(username)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@app.get("/api/peers/{username}")
+async def peer_profile(username: str):
+    """Get a peer's profile."""
+    peer = get_peer(username)
+    if not peer:
+        raise HTTPException(status_code=404, detail="Peer not found")
+    return peer
+
+
+@app.get("/api/peers")
+async def peer_list():
+    """Get peer pool stats."""
+    return {"pool_size": get_peer_count()}
 
 
 # ── Run ──
