@@ -260,6 +260,7 @@ async def peer_register(req: dict):
             skill_gaps=req.get("skill_gaps", []),
             languages=req.get("languages", []),
             frameworks=req.get("frameworks", []),
+            topics=req.get("topics", []),
         )
         return {"status": "registered", "peer": peer}
     except Exception as e:

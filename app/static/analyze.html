@@ -794,6 +794,7 @@
             skill_gaps: data.skill_gaps || [],
             languages: data.github_profile?.languages || [],
             frameworks: data.github_profile?.frameworks || [],
+            topics: data.github_profile?.topics || [],
           }),
         }).catch(e => console.error('Peer registration failed:', e));
       } catch (err) {

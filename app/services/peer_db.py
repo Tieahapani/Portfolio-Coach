@@ -24,10 +24,16 @@ def _get_db() -> sqlite3.Connection:
             skill_gaps TEXT DEFAULT '[]',
             languages TEXT DEFAULT '[]',
             frameworks TEXT DEFAULT '[]',
+            topics TEXT DEFAULT '[]',
             registered_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
     """)
+    # Migration for existing DBs
+    try:
+        conn.execute("SELECT topics FROM peers LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE peers ADD COLUMN topics TEXT DEFAULT '[]'")
     conn.commit()
     return conn
 
@@ -51,19 +57,21 @@ def upsert_peer(
     skill_gaps: list[str],
     languages: list[str],
     frameworks: list[str],
+    topics: list[str] | None = None,
 ) -> dict:
     """Insert or update a peer profile in SQLite."""
     import json
     from datetime import datetime, timezone
 
+    topics = topics or []
     now = datetime.now(timezone.utc).isoformat()
     conn = _get_db()
     conn.execute(
         """
         INSERT INTO peers (github_username, target_role, contact, current_projects,
-                          matched_skills, skill_gaps, languages, frameworks,
+                          matched_skills, skill_gaps, languages, frameworks, topics,
                           registered_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(github_username) DO UPDATE SET
             target_role=excluded.target_role,
             contact=excluded.contact,
@@ -72,6 +80,7 @@ def upsert_peer(
             skill_gaps=excluded.skill_gaps,
             languages=excluded.languages,
             frameworks=excluded.frameworks,
+            topics=excluded.topics,
             updated_at=excluded.updated_at
         """,
         (
@@ -83,6 +92,7 @@ def upsert_peer(
             json.dumps(skill_gaps),
             json.dumps(languages),
             json.dumps(frameworks),
+            json.dumps(topics),
             now,
             now,
         ),
@@ -103,8 +113,8 @@ def get_peer(github_username: str) -> dict | None:
     if not row:
         return None
     d = dict(row)
-    for field in ("matched_skills", "skill_gaps", "languages", "frameworks"):
-        d[field] = json.loads(d[field])
+    for field in ("matched_skills", "skill_gaps", "languages", "frameworks", "topics"):
+        d[field] = json.loads(d.get(field, "[]"))
     return d
 
 
@@ -116,8 +126,8 @@ def get_all_peers() -> list[dict]:
     results = []
     for row in rows:
         d = dict(row)
-        for field in ("matched_skills", "skill_gaps", "languages", "frameworks"):
-            d[field] = json.loads(d[field])
+        for field in ("matched_skills", "skill_gaps", "languages", "frameworks", "topics"):
+            d[field] = json.loads(d.get(field, "[]"))
         results.append(d)
     return results
 

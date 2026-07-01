@@ -1,8 +1,12 @@
 import json
 import asyncio
+from cachetools import TTLCache
 from openai import AsyncOpenAI
 from app.config import get_settings
 from app.schemas import MarketData, JobPosting
+
+# Cache market research per role for 6 hours (max 30 roles)
+_market_cache: TTLCache = TTLCache(maxsize=30, ttl=6 * 60 * 60)
 
 
 MARKET_PROMPT = """Search for current "{role}" job postings. Focus on internship and entry-level roles in 2025-2026.
@@ -53,7 +57,11 @@ async def search_openai(role: str) -> dict | None:
 
 
 async def research_market(role: str, mode: str = "fast") -> MarketData:
-    """Market research using GPT-4o-mini."""
+    """Market research using GPT-4o-mini (cached 6 hours per role)."""
+    cache_key = role.lower().strip()
+    if cache_key in _market_cache:
+        return _market_cache[cache_key]
+
     try:
         data = await search_openai(role)
     except Exception as e:
@@ -63,10 +71,12 @@ async def research_market(role: str, mode: str = "fast") -> MarketData:
     if not data:
         return MarketData(sources=["fallback"])
 
-    return MarketData(
+    result = MarketData(
         market_skills=data.get("market_skills", []),
         trending_tools=data.get("trending_tools", []),
         industry_trends=data.get("industry_trends", ""),
         sample_jobs=[JobPosting(**j) for j in data.get("sample_jobs", [])],
         sources=["GPT-4o-mini"],
     )
+    _market_cache[cache_key] = result
+    return result

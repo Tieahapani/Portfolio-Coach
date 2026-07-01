@@ -1,16 +1,20 @@
-"""Multi-step peer matching pipeline:
-1. Build profile text → embed with text-embedding-3-small
+"""Peer matching pipeline:
+1. Build profile text (role, skills, gaps, languages, topics) → embed with text-embedding-3-small
 2. Store in ChromaDB
-3. Query ChromaDB for similar peers
-4. GPT-4o-mini ranks matches, explains reasoning, suggests collab projects
+3. Query ChromaDB for similar peers (cosine similarity)
+4. GPT-4o-mini analyzes matches, explains reasoning, suggests collab projects
 """
 
 import json
+from cachetools import TTLCache
 from openai import AsyncOpenAI
 from app.config import get_settings
 from app.services.peer_db import (
     upsert_peer, get_peer, store_embedding, query_similar, get_all_peers,
 )
+
+# Skip re-embedding if peer was embedded within the last hour
+_embedding_cache: TTLCache = TTLCache(maxsize=200, ttl=60 * 60)
 
 
 def _build_profile_text(peer: dict) -> str:
@@ -22,6 +26,8 @@ def _build_profile_text(peer: dict) -> str:
         f"Skills: {', '.join(peer.get('matched_skills', []))}",
         f"Skill gaps: {', '.join(peer.get('skill_gaps', []))}",
     ]
+    if peer.get("topics"):
+        parts.append(f"Domains & topics: {', '.join(peer['topics'])}")
     if peer.get("current_projects"):
         parts.append(f"Current projects: {peer['current_projects']}")
     return "\n".join(parts)
@@ -47,12 +53,14 @@ async def register_peer(
     skill_gaps: list[str] | None = None,
     languages: list[str] | None = None,
     frameworks: list[str] | None = None,
+    topics: list[str] | None = None,
 ) -> dict:
     """Step 1 & 2: Save peer profile to SQLite, embed and store in ChromaDB."""
     matched_skills = matched_skills or []
     skill_gaps = skill_gaps or []
     languages = languages or []
     frameworks = frameworks or []
+    topics = topics or []
 
     # Save to SQLite
     peer = upsert_peer(
@@ -64,23 +72,27 @@ async def register_peer(
         skill_gaps=skill_gaps,
         languages=languages,
         frameworks=frameworks,
+        topics=topics,
     )
 
-    # Build text and embed
-    profile_text = _build_profile_text(peer)
-    try:
-        embedding = await _get_embedding(profile_text)
-        store_embedding(
-            github_username=github_username,
-            embedding=embedding,
-            metadata={
-                "target_role": target_role,
-                "languages": ", ".join(languages),
-                "contact": contact,
-            },
-        )
-    except Exception as e:
-        print(f"Embedding failed for {github_username}: {e}")
+    # Embed profile (skip if embedded within TTL)
+    cache_key = github_username.lower()
+    if cache_key not in _embedding_cache:
+        profile_text = _build_profile_text(peer)
+        try:
+            embedding = await _get_embedding(profile_text)
+            store_embedding(
+                github_username=github_username,
+                embedding=embedding,
+                metadata={
+                    "target_role": target_role,
+                    "languages": ", ".join(languages),
+                    "contact": contact,
+                },
+            )
+            _embedding_cache[cache_key] = True
+        except Exception as e:
+            print(f"Embedding failed for {github_username}: {e}")
 
     return peer
 
@@ -147,7 +159,7 @@ async def find_peers(github_username: str, n: int = 5) -> dict:
     if not candidates:
         return {"matches": [], "message": "No peers in the pool yet. Be the first!"}
 
-    # Step 3: Enrich candidates with full profile from SQLite
+    # Step 3: Enrich candidates with full profile data
     enriched = []
     for c in candidates:
         peer = get_peer(c["github_username"])
@@ -165,6 +177,7 @@ async def find_peers(github_username: str, n: int = 5) -> dict:
             f"- {p['github_username']} (similarity: {p['similarity_score']})\n"
             f"  Role: {p['target_role']}\n"
             f"  Languages: {', '.join(p.get('languages', []))}\n"
+            f"  Topics: {', '.join(p.get('topics', []))}\n"
             f"  Skills: {', '.join(p.get('matched_skills', []))}\n"
             f"  Gaps: {', '.join(p.get('skill_gaps', []))}\n"
             f"  Projects: {p.get('current_projects', 'None listed')}\n"

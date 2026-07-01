@@ -1,7 +1,12 @@
+import hashlib
 import httpx
 import asyncio
+from cachetools import TTLCache
 from app.config import get_settings
 from app.schemas import RepoInfo, GitHubProfile
+
+# Cache GitHub profiles for 15 minutes (max 50 users)
+_github_cache: TTLCache = TTLCache(maxsize=50, ttl=15 * 60)
 
 FRAMEWORK_PATTERNS: dict[str, str] = {
     "react": "React", "nextjs": "Next.js", "vue": "Vue", "angular": "Angular",
@@ -88,7 +93,11 @@ def detect_skills(repos: list[dict]) -> tuple[list[str], list[str], list[str]]:
 
 
 async def analyze_github(username: str, fetch_readmes: bool = False) -> GitHubProfile:
-    """Full GitHub profile analysis."""
+    """Full GitHub profile analysis (cached 15 min)."""
+    cache_key = f"{username.lower()}:{fetch_readmes}"
+    if cache_key in _github_cache:
+        return _github_cache[cache_key]
+
     raw_repos = await fetch_repos(username)
     non_fork = [r for r in raw_repos if not r.get("fork")]
 
@@ -116,10 +125,12 @@ async def analyze_github(username: str, fetch_readmes: bool = False) -> GitHubPr
         for r in non_fork
     ]
 
-    return GitHubProfile(
+    profile = GitHubProfile(
         repos=repos,
         languages=languages,
         frameworks=frameworks,
         topics=topics,
         total_repos=len(non_fork),
     )
+    _github_cache[cache_key] = profile
+    return profile
