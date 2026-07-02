@@ -2,6 +2,10 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()  # make .env vars visible to os.getenv (e.g. PHOENIX_*)
 from fastapi import FastAPI, HTTPException, Request, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
