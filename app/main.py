@@ -1,12 +1,27 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Cookie
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from openinference.instrumentation.openai import OpenAIInstrumentor
+from openinference.instrumentation.google_genai import GoogleGenAIInstrumentor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
 from app.config import get_settings
+
+# ── Phoenix LLM Observability ──
+PHOENIX_ENDPOINT = os.getenv("PHOENIX_ENDPOINT", "http://127.0.0.1:6006/v1/traces")
+tracer_provider = TracerProvider()
+tracer_provider.add_span_processor(
+    SimpleSpanProcessor(OTLPSpanExporter(endpoint=PHOENIX_ENDPOINT))
+)
+OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
+GoogleGenAIInstrumentor().instrument(tracer_provider=tracer_provider)
 from app.schemas import (
     AnalyzeRequest,
     AnalysisResult,
@@ -24,6 +39,10 @@ from app.services.tracker import (
 )
 from app.services.peer_matching import register_peer, find_peers
 from app.services.peer_db import get_peer, get_peer_count
+from app.services.auth import (
+    exchange_code_for_user, upsert_user, get_user,
+    update_user_profile, create_token, verify_token,
+)
 
 
 @asynccontextmanager
@@ -33,6 +52,7 @@ async def lifespan(app: FastAPI):
     print("Portfolio Coach API")
     print(f"  OpenAI:  {'✓ configured' if settings.has_openai else '✗ not set'}")
     print(f"  GitHub:  {'✓ token set' if settings.has_github_token else '○ public API'}")
+    print(f"  Phoenix: → {PHOENIX_ENDPOINT}")
     print("=" * 50)
 
     if not settings.has_openai:
@@ -101,6 +121,86 @@ async def tracker_page():
 @app.get("/peers", response_class=FileResponse)
 async def peers_page():
     return FileResponse(STATIC_DIR / "peers.html")
+
+
+# ── Auth ──
+
+@app.get("/auth/login")
+async def auth_login():
+    """Redirect to GitHub OAuth."""
+    settings = get_settings()
+    return RedirectResponse(
+        f"https://github.com/login/oauth/authorize"
+        f"?client_id={settings.github_client_id}"
+        f"&redirect_uri=http://localhost:{settings.port}/auth/callback"
+    )
+
+
+@app.get("/auth/callback")
+async def auth_callback(code: str):
+    """Handle GitHub OAuth callback."""
+    try:
+        github_user = await exchange_code_for_user(code)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"OAuth failed: {e}")
+
+    # Create or update user in DB
+    user = upsert_user(
+        github_username=github_user["github_username"],
+        name=github_user["name"],
+        avatar_url=github_user["avatar_url"],
+    )
+
+    # Set JWT cookie and redirect to analyze page
+    token = create_token(github_user["github_username"])
+    response = RedirectResponse(url="/analyze", status_code=302)
+    response.set_cookie(
+        key="session",
+        value=token,
+        httponly=True,
+        max_age=30 * 24 * 60 * 60,  # 30 days
+        samesite="lax",
+    )
+    return response
+
+
+@app.get("/auth/me")
+async def auth_me(session: str = Cookie(default="")):
+    """Get current logged-in user profile."""
+    if not session:
+        return {"authenticated": False}
+    username = verify_token(session)
+    if not username:
+        return {"authenticated": False}
+    user = get_user(username)
+    if not user:
+        return {"authenticated": False}
+    return {"authenticated": True, "user": user}
+
+
+@app.put("/auth/profile")
+async def auth_update_profile(req: dict, session: str = Cookie(default="")):
+    """Update user's contact, target role, or current projects."""
+    if not session:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    username = verify_token(session)
+    if not username:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    user = update_user_profile(
+        github_username=username,
+        contact=req.get("contact", ""),
+        target_role=req.get("target_role", ""),
+        current_projects=req.get("current_projects", ""),
+    )
+    return {"user": user}
+
+
+@app.get("/auth/logout")
+async def auth_logout():
+    """Clear session cookie."""
+    response = RedirectResponse(url="/", status_code=302)
+    response.delete_cookie("session")
+    return response
 
 
 # ── Health ──

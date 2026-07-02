@@ -7,5 +7,12 @@ python-dotenv==1.0.1
 pydantic==2.9.0
 pydantic-settings==2.5.0
 openai>=1.0.0
+groq>=1.0.0
 chromadb>=1.0.0
 cachetools>=5.3.0
+PyJWT>=2.0.0
+arize-phoenix>=17.0.0
+openinference-instrumentation-openai>=0.1.0
+openinference-instrumentation-google-genai>=1.0.0
+opentelemetry-sdk>=1.0.0
+opentelemetry-exporter-otlp>=1.0.0

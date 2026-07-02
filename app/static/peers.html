@@ -441,6 +441,7 @@
       <a href="/analyze">Analyze</a>
       <a href="/tracker">Tracker</a>
       <a href="/peers" class="active">Peers</a>
+      <a href="/auth/login" id="authLink" style="color:var(--accent);font-weight:600">Sign in with GitHub</a>
     </div>
   </nav>
 
@@ -475,6 +476,25 @@
     const loadingStep = document.getElementById('loadingStep');
     const resultsSection = document.getElementById('resultsSection');
     const messageBox = document.getElementById('messageBox');
+
+    // ── Auth: auto-fill username from session ──
+    (async () => {
+      try {
+        const resp = await fetch('/auth/me');
+        const data = await resp.json();
+        if (data.authenticated && data.user) {
+          const u = data.user;
+          const input = document.getElementById('searchUsername');
+          input.value = u.github_username || '';
+          // Pre-filled but editable for testing
+          const authLink = document.getElementById('authLink');
+          authLink.textContent = u.name || u.github_username;
+          authLink.href = '/auth/logout';
+          authLink.title = 'Click to sign out';
+          authLink.style.color = 'var(--text)';
+        }
+      } catch (e) {}
+    })();
 
     const matchSteps = [
       'Embedding your profile...',

@@ -1,13 +1,14 @@
 """Background commit tracker — monitors registered users' GitHub activity
 and checks alignment with their target role's market demands."""
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from openai import AsyncOpenAI
+from google import genai
 
 from app.config import get_settings
 
@@ -203,9 +204,9 @@ async def analyze_alignment(
     languages: list[str],
     market_skills: list[str],
 ) -> dict | None:
-    """Use GPT-4o-mini to analyze commit alignment with market demands."""
+    """Use Gemini 2.5 Flash to analyze commit alignment with market demands."""
     settings = get_settings()
-    if not settings.has_openai or not commits:
+    if not settings.has_gemini or not commits:
         return None
 
     commit_lines = [
@@ -220,14 +221,13 @@ async def analyze_alignment(
     )
 
     try:
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=1000,
+        client = genai.Client(api_key=settings.effective_gemini_key)
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model="gemini-2.5-flash",
+            contents=prompt,
         )
-        text = response.choices[0].message.content or ""
+        text = response.text or ""
         cleaned = text.replace("```json", "").replace("```", "").strip()
         return json.loads(cleaned)
     except Exception as e:

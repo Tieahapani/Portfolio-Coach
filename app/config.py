@@ -7,7 +7,11 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    groq_api_key: str = ""
     github_token: str = ""
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    jwt_secret: str = "change-me-in-production"
     host: str = "0.0.0.0"
     port: int = 8000
 
@@ -26,6 +30,10 @@ class Settings(BaseSettings):
     @property
     def has_openai(self) -> bool:
         return len(self.openai_api_key) > 0
+
+    @property
+    def has_groq(self) -> bool:
+        return len(self.groq_api_key) > 0
 
     @property
     def has_github_token(self) -> bool:

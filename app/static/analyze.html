@@ -486,6 +486,7 @@
       <a href="/analyze" class="active">Analyze</a>
       <a href="/tracker">Tracker</a>
       <a href="/peers">Peers</a>
+      <a href="/auth/login" id="authLink" style="color:var(--accent);font-weight:600">Sign in with GitHub</a>
     </div>
   </nav>
 
@@ -585,6 +586,28 @@
     const errorSection = document.getElementById('errorSection');
     const resultsSection = document.getElementById('resultsSection');
     const loadingStep = document.getElementById('loadingStep');
+
+    // ── Auth: auto-fill from session ──
+    (async () => {
+      try {
+        const resp = await fetch('/auth/me');
+        const data = await resp.json();
+        if (data.authenticated && data.user) {
+          const u = data.user;
+          document.getElementById('username').value = u.github_username || '';
+          document.getElementById('contact').value = u.contact || '';
+          document.getElementById('role').value = u.target_role || '';
+          document.getElementById('projects').value = u.current_projects || '';
+          // Fields are pre-filled but editable for testing
+          // Update nav
+          const authLink = document.getElementById('authLink');
+          authLink.textContent = u.name || u.github_username;
+          authLink.href = '/auth/logout';
+          authLink.title = 'Click to sign out';
+          authLink.style.color = 'var(--text)';
+        }
+      } catch (e) {}
+    })();
 
     const steps = [
       'Fetching GitHub profile...',
@@ -797,6 +820,17 @@
             topics: data.github_profile?.topics || [],
           }),
         }).catch(e => console.error('Peer registration failed:', e));
+
+        // Save profile updates for logged-in users
+        fetch('/auth/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contact: contact,
+            target_role: role,
+            current_projects: projects || '',
+          }),
+        }).catch(() => {});
       } catch (err) {
         clearInterval(interval);
         showError(err.message);

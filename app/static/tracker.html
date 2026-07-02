@@ -378,6 +378,7 @@
       <a href="/analyze">Analyze</a>
       <a href="/tracker" class="active">Tracker</a>
       <a href="/peers">Peers</a>
+      <a href="/auth/login" id="authLink" style="color:var(--accent);font-weight:600">Sign in with GitHub</a>
     </div>
   </nav>
 
@@ -422,6 +423,25 @@
   <script>
     const trackerForm = document.getElementById('trackerForm');
     const trackerLoading = document.getElementById('trackerLoading');
+
+    // ── Auth: auto-fill username from session ──
+    (async () => {
+      try {
+        const resp = await fetch('/auth/me');
+        const data = await resp.json();
+        if (data.authenticated && data.user) {
+          const u = data.user;
+          const input = document.getElementById('trackerUsername');
+          input.value = u.github_username || '';
+          // Pre-filled but editable for testing
+          const authLink = document.getElementById('authLink');
+          authLink.textContent = u.name || u.github_username;
+          authLink.href = '/auth/logout';
+          authLink.title = 'Click to sign out';
+          authLink.style.color = 'var(--text)';
+        }
+      } catch (e) {}
+    })();
 
     function esc(str) {
       if (!str) return '';
