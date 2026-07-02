@@ -1,0 +1,12 @@
+[Unit]
+Description=Portfolio Coach
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/portfolio-coach
+ExecStart=/opt/portfolio-coach/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
