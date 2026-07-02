@@ -1,5 +1,15 @@
 """SQLite storage for peer profiles + ChromaDB for embeddings."""
 
+# ChromaDB needs sqlite3 >= 3.35. On older systems (e.g. CentOS) swap in
+# pysqlite3-binary before chromadb imports the stdlib sqlite3.
+try:
+    __import__("pysqlite3")
+    import sys as _sys
+
+    _sys.modules["sqlite3"] = _sys.modules.pop("pysqlite3")
+except ImportError:
+    pass
+
 import sqlite3
 from pathlib import Path
 
