@@ -10,15 +10,19 @@ from openinference.instrumentation.openai import OpenAIInstrumentor
 from openinference.instrumentation.google_genai import GoogleGenAIInstrumentor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from app.config import get_settings
 
 # ── Phoenix LLM Observability ──
+# Local default: http://127.0.0.1:6006/v1/traces (run `phoenix serve` locally).
+# Production: set PHOENIX_ENDPOINT + PHOENIX_API_KEY in .env for Phoenix Cloud.
 PHOENIX_ENDPOINT = os.getenv("PHOENIX_ENDPOINT", "http://127.0.0.1:6006/v1/traces")
+PHOENIX_API_KEY = os.getenv("PHOENIX_API_KEY", "")
+_headers = {"api_key": PHOENIX_API_KEY, "authorization": f"Bearer {PHOENIX_API_KEY}"} if PHOENIX_API_KEY else None
 tracer_provider = TracerProvider()
 tracer_provider.add_span_processor(
-    SimpleSpanProcessor(OTLPSpanExporter(endpoint=PHOENIX_ENDPOINT))
+    BatchSpanProcessor(OTLPSpanExporter(endpoint=PHOENIX_ENDPOINT, headers=_headers))
 )
 OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
 GoogleGenAIInstrumentor().instrument(tracer_provider=tracer_provider)
