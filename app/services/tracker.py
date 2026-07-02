@@ -166,8 +166,6 @@ async def fetch_recent_commits(username: str) -> list[dict]:
                 repos = resp.json()
 
                 for repo in repos:
-                    if repo.get("fork"):
-                        continue
                     repo_name = repo.get("name", "")
                     owner = repo.get("owner", {}).get("login", username)
                     try:

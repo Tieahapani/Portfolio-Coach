@@ -99,14 +99,13 @@ async def analyze_github(username: str, fetch_readmes: bool = False) -> GitHubPr
         return _github_cache[cache_key]
 
     raw_repos = await fetch_repos(username)
-    non_fork = [r for r in raw_repos if not r.get("fork")]
 
-    languages, frameworks, topics = detect_skills(non_fork)
+    languages, frameworks, topics = detect_skills(raw_repos)
 
     # Optionally fetch READMEs for top repos
     readmes: dict[str, str] = {}
     if fetch_readmes:
-        top_repos = non_fork[:6]
+        top_repos = raw_repos[:6]
         tasks = [fetch_readme(username, r["name"]) for r in top_repos]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for repo, readme in zip(top_repos, results):
@@ -122,7 +121,7 @@ async def analyze_github(username: str, fetch_readmes: bool = False) -> GitHubPr
             stars=r.get("stargazers_count", 0),
             readme_excerpt=readmes.get(r["name"], ""),
         )
-        for r in non_fork
+        for r in raw_repos
     ]
 
     profile = GitHubProfile(
@@ -130,7 +129,7 @@ async def analyze_github(username: str, fetch_readmes: bool = False) -> GitHubPr
         languages=languages,
         frameworks=frameworks,
         topics=topics,
-        total_repos=len(non_fork),
+        total_repos=len(raw_repos),
     )
     _github_cache[cache_key] = profile
     return profile
