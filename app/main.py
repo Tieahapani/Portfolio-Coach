@@ -126,13 +126,14 @@ async def peers_page():
 # ── Auth ──
 
 @app.get("/auth/login")
-async def auth_login():
+async def auth_login(request: Request):
     """Redirect to GitHub OAuth."""
     settings = get_settings()
+    redirect_uri = str(request.base_url).rstrip("/") + "/auth/callback"
     return RedirectResponse(
         f"https://github.com/login/oauth/authorize"
         f"?client_id={settings.github_client_id}"
-        f"&redirect_uri=http://localhost:{settings.port}/auth/callback"
+        f"&redirect_uri={redirect_uri}"
     )
 
 
