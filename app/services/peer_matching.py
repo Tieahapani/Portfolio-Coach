@@ -5,13 +5,14 @@
    - similar:        user's profile embedding vs peer_profiles (same journey)
    - complementary:  user's skill GAPS embedding vs peer_skills (they know what you lack)
    - both:           mix of the two
-4. GPT-4o-mini analyzes matches, explains reasoning, suggests collab projects
+4. Gemini 2.5 Flash analyzes matches, explains reasoning, suggests collab projects
 """
 
 import json
 from cachetools import TTLCache
 from openai import AsyncOpenAI
 from app.config import get_settings
+from app.services.recommender import GEMINI_BASE_URL
 from app.services.peer_db import (
     upsert_peer, get_peer, store_embedding, query_similar, get_all_peers,
     get_embedded_ids,
@@ -167,20 +168,30 @@ Each peer has a match type:
 
 ## Instructions
 For each peer, analyze:
-1. Why they're a good match, consistent with their match type (shared goals for similar; which of the user's gaps they cover for complementary)
-2. What collaboration could look like
-3. A specific project they could build together. For complementary peers, the project should deliberately use the skills the user is missing so they learn them from the peer.
+1. Why they're a good match, consistent with their match type (shared goals for similar; which of the user's gaps they cover for complementary). Name the SPECIFIC overlapping or complementary skills — never say "similar interests" without naming them.
+2. A specific project they could build together, following the project rules below.
+
+## Project rules (STRICT)
+- The project must be grounded in BOTH people's actual data: reference their target roles, their listed current projects/topics, and the exact skill names involved. If the user's gap is "Kubernetes", the project must have a concrete Kubernetes component — name it.
+- For complementary peers: the project must deliberately force the requesting user to practice their missing skills, with the peer's strengths covering the parts the user can't do yet. State the division of work: who builds what.
+- For similar peers: pick a project slightly ABOVE both of their current levels, targeting a gap they SHARE, so they struggle through it together.
+- The project must be scoped to something two people can ship a working v1 of in 2-4 weeks. Not a platform, not a startup — a focused tool.
+- BANNED: todo apps, generic dashboards, portfolio websites, generic chat apps, "e-commerce platform", "social media app", vague "ML model" projects with no dataset/domain, and any idea that doesn't name a specific domain and dataset/API.
+- Every project needs a specific domain hook: a real dataset, a real API, or a real problem from one of their current projects.
+
+BAD example: "Build a machine learning dashboard to visualize data and improve skills."
+GOOD example: "Build a CLI that ingests a GitHub repo's Actions logs and predicts flaky tests. Peer sets up the k8s-based runner (their strength, your gap: Kubernetes); you build the log parser in Python. Ship v1 against the peer's existing 'ci-tools' repo."
 
 Respond with ONLY raw JSON (no markdown, no backticks):
 {{
   "matches": [
     {{
       "github_username": "peer_username",
-      "match_reason": "2-3 sentence explanation of why this is a good match",
+      "match_reason": "2-3 sentences naming the specific skills/goals that connect them",
       "collaboration_type": "co-builder|mentor|study-partner|complementary",
       "suggested_project": {{
-        "title": "Project they could build together",
-        "description": "2-3 sentences about what and how",
+        "title": "Specific, concrete project name",
+        "description": "3-4 sentences: what it does, the specific domain/dataset/API it uses, who builds which part, and which of the user's gap skills it forces them to learn",
         "tech_stack": ["tech1", "tech2"]
       }},
       "shared_interests": ["interest1", "interest2"],
@@ -195,7 +206,7 @@ async def find_peers(github_username: str, n: int = 5, mode: str = "both") -> di
     1. Embed user's profile (similar) and/or skill gaps (complementary)
     2. Query ChromaDB: profile vs peer_profiles, gaps vs peer_skills
     3. Merge, tag match_type, enrich with SQLite profile data
-    4. GPT-4o-mini analyzes and ranks matches
+    4. Gemini 2.5 Flash analyzes and ranks matches
 
     Modes: "similar" | "complementary" | "both"
     """
@@ -279,7 +290,7 @@ async def find_peers(github_username: str, n: int = 5, mode: str = "both") -> di
     if not enriched:
         return {"matches": [], "message": "No matching peers found."}
 
-    # Step 4: GPT-4o-mini analyzes matches
+    # Step 4: Gemini 2.5 Flash analyzes matches
     peer_lines = []
     for p in enriched:
         peer_lines.append(
@@ -304,11 +315,14 @@ async def find_peers(github_username: str, n: int = 5, mode: str = "both") -> di
     )
 
     try:
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        client = AsyncOpenAI(
+            api_key=settings.effective_gemini_key,
+            base_url=GEMINI_BASE_URL,
+        )
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gemini-2.5-flash",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
+            temperature=0.5,
             max_tokens=4000,
         )
         text = response.choices[0].message.content or ""

@@ -24,6 +24,9 @@ Sample jobs found:
 
 ## Instructions
 Identify skill gaps and recommend 4 concrete, buildable projects that bridge them.
+
+IMPORTANT — do not default to new projects every time. First look at the developer's EXISTING repos: if extending one of them would teach a market-demanded skill they lack, recommend that enhancement instead of a brand-new project. For enhancements, name the exact repo (e.g. "Add Kubernetes deployment + observability to 'my-api'") and describe what to add and which gap it closes. Aim for a mix: typically 1-2 enhancements of existing repos (when they fit) and the rest new projects. Only recommend all-new projects if none of their repos are worth extending toward the target role.
+
 For EACH project, include 3-4 learning resources (real courses, tutorials, YouTube channels, documentation) that will help the developer learn the skills needed to build it. Tailor resources to their current skill level based on their profile.
 
 Respond with ONLY raw JSON (no markdown, no backticks):
@@ -104,19 +107,25 @@ def _parse_json(text: str) -> dict | None:
     return None
 
 
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
 async def generate_recommendations(
     profile: GitHubProfile,
     market: MarketData,
     target_role: str,
 ) -> tuple[dict, str]:
-    """Generate project recommendations using GPT-4o-mini."""
+    """Generate project recommendations using Gemini 2.5 Flash."""
     settings = get_settings()
     prompt = _build_prompt(profile, market, target_role)
 
     try:
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        client = AsyncOpenAI(
+            api_key=settings.effective_gemini_key,
+            base_url=GEMINI_BASE_URL,
+        )
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gemini-2.5-flash",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=8000,
@@ -124,8 +133,8 @@ async def generate_recommendations(
         text = response.choices[0].message.content or ""
         result = _parse_json(text)
         if result:
-            return result, "GPT-4o-mini"
+            return result, "Gemini-2.5-Flash"
     except Exception as e:
-        print(f"OpenAI recommendation failed: {e}")
+        print(f"Gemini recommendation failed: {e}")
 
     return {}, "none"
