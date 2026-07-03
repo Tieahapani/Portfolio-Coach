@@ -2,9 +2,10 @@
 and checks alignment with their target role's market demands."""
 
 import asyncio
+import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -20,7 +21,7 @@ ALIGNMENT_PROMPT = """You are a career coach analyzing a developer's recent GitH
 
 ## Target Role: {target_role}
 
-## Recent Commits (last 7 days)
+## Recent Commits (last 90 days)
 {commit_summary}
 
 ## Their Current Skills
@@ -103,6 +104,9 @@ async def fetch_recent_commits(username: str) -> list[dict]:
     if settings.has_github_token:
         headers["Authorization"] = f"token {settings.github_token}"
 
+    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+    cutoff_iso = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
+
     commits = []
     seen_messages = set()
 
@@ -123,6 +127,8 @@ async def fetch_recent_commits(username: str) -> list[dict]:
                 repo_name = event.get("repo", {}).get("name", "")
                 short_repo = repo_name.split("/")[-1] if "/" in repo_name else repo_name
                 created_at = event.get("created_at", "")
+                if created_at and created_at < cutoff_iso:
+                    continue
 
                 if event.get("type") == "PushEvent":
                     # Each push can contain multiple commits
@@ -168,11 +174,15 @@ async def fetch_recent_commits(username: str) -> list[dict]:
                 for repo in repos:
                     repo_name = repo.get("name", "")
                     owner = repo.get("owner", {}).get("login", username)
+                    # Skip repos with no pushes inside the 90-day window
+                    pushed_at = repo.get("pushed_at", "")
+                    if pushed_at and pushed_at < cutoff_iso:
+                        continue
                     try:
                         resp = await client.get(
                             f"https://api.github.com/repos/{owner}/{repo_name}/commits",
                             headers=headers,
-                            params={"author": username, "per_page": 5},
+                            params={"author": username, "per_page": 5, "since": cutoff_iso},
                         )
                         if resp.status_code != 200:
                             continue
@@ -250,6 +260,22 @@ async def check_user(username: str) -> dict | None:
     if not commits:
         return {"status": "no_commits", "message": "No recent commits found"}
 
+    # Content-based cache: if commits haven't changed since the last insight
+    # for the same target role, reuse it instead of a fresh (nondeterministic) LLM call.
+    commit_hash = hashlib.sha256(
+        "\n".join(f"{c['repo']}:{c['message']}" for c in commits).encode()
+    ).hexdigest()
+    last_insight = (user.get("insights") or [None])[0]
+    if (
+        last_insight
+        and last_insight.get("commit_hash") == commit_hash
+        and last_insight.get("target_role") == target_role
+    ):
+        user["last_checked"] = datetime.now(timezone.utc).isoformat()
+        data["users"][username.lower()] = user
+        _save_data(data)
+        return last_insight
+
     profile = await analyze_github(username, fetch_readmes=False)
     market = await research_market(target_role)
 
@@ -268,6 +294,8 @@ async def check_user(username: str) -> dict | None:
     # Save insight
     insight["checked_at"] = datetime.now(timezone.utc).isoformat()
     insight["commit_count"] = len(commits)
+    insight["commit_hash"] = commit_hash
+    insight["target_role"] = target_role
 
     user["last_checked"] = insight["checked_at"]
     # Keep last 10 insights
