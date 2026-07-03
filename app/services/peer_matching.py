@@ -1,7 +1,10 @@
 """Peer matching pipeline:
-1. Build profile text (role, skills, gaps, languages, topics) → embed with text-embedding-3-small
-2. Store in ChromaDB
-3. Query ChromaDB for similar peers (cosine similarity)
+1. Build profile text (full) + skills text (what they HAVE) → embed with text-embedding-3-small
+2. Store both in ChromaDB (collections: peer_profiles, peer_skills)
+3. Retrieval modes:
+   - similar:        user's profile embedding vs peer_profiles (same journey)
+   - complementary:  user's skill GAPS embedding vs peer_skills (they know what you lack)
+   - both:           mix of the two
 4. GPT-4o-mini analyzes matches, explains reasoning, suggests collab projects
 """
 
@@ -11,6 +14,7 @@ from openai import AsyncOpenAI
 from app.config import get_settings
 from app.services.peer_db import (
     upsert_peer, get_peer, store_embedding, query_similar, get_all_peers,
+    get_embedded_ids,
 )
 
 # Skip re-embedding if peer was embedded within the last hour
@@ -33,15 +37,35 @@ def _build_profile_text(peer: dict) -> str:
     return "\n".join(parts)
 
 
-async def _get_embedding(text: str) -> list[float]:
-    """Get embedding from OpenAI text-embedding-3-small."""
+def _build_skills_text(peer: dict) -> str:
+    """Only what the peer HAS (no gaps) — searched by others' gap queries."""
+    parts = [
+        f"Languages: {', '.join(peer.get('languages', []))}",
+        f"Frameworks: {', '.join(peer.get('frameworks', []))}",
+        f"Skills: {', '.join(peer.get('matched_skills', []))}",
+    ]
+    if peer.get("topics"):
+        parts.append(f"Domains & topics: {', '.join(peer['topics'])}")
+    return "\n".join(parts)
+
+
+def _build_gaps_text(peer: dict) -> str:
+    """What the peer WANTS to learn — used as the complementary query."""
+    return (
+        f"Looking for developers experienced in: "
+        f"{', '.join(peer.get('skill_gaps', []))}"
+    )
+
+
+async def _get_embeddings(texts: list[str]) -> list[list[float]]:
+    """Batch embeddings from OpenAI text-embedding-3-small."""
     settings = get_settings()
     client = AsyncOpenAI(api_key=settings.openai_api_key)
     response = await client.embeddings.create(
         model="text-embedding-3-small",
-        input=text,
+        input=texts,
     )
-    return response.data[0].embedding
+    return [d.embedding for d in response.data]
 
 
 async def register_peer(
@@ -75,26 +99,53 @@ async def register_peer(
         topics=topics,
     )
 
-    # Embed profile (skip if embedded within TTL)
+    # Embed profile + skills (skip if embedded within TTL)
     cache_key = github_username.lower()
     if cache_key not in _embedding_cache:
-        profile_text = _build_profile_text(peer)
         try:
-            embedding = await _get_embedding(profile_text)
+            profile_emb, skills_emb = await _get_embeddings(
+                [_build_profile_text(peer), _build_skills_text(peer)]
+            )
+            metadata = {
+                "target_role": target_role,
+                "languages": ", ".join(languages),
+            }
             store_embedding(
                 github_username=github_username,
-                embedding=embedding,
-                metadata={
-                    "target_role": target_role,
-                    "languages": ", ".join(languages),
-                    "contact": contact,
-                },
+                embedding=profile_emb,
+                metadata=metadata,
+                collection_name="peer_profiles",
+            )
+            store_embedding(
+                github_username=github_username,
+                embedding=skills_emb,
+                metadata=metadata,
+                collection_name="peer_skills",
             )
             _embedding_cache[cache_key] = True
         except Exception as e:
             print(f"Embedding failed for {github_username}: {e}")
 
     return peer
+
+
+async def _backfill_skills_embeddings() -> None:
+    """Embed skills for peers registered before the peer_skills collection existed."""
+    embedded = get_embedded_ids("peer_skills")
+    missing = [p for p in get_all_peers() if p["github_username"] not in embedded]
+    if not missing:
+        return
+    embeddings = await _get_embeddings([_build_skills_text(p) for p in missing])
+    for peer, emb in zip(missing, embeddings):
+        store_embedding(
+            github_username=peer["github_username"],
+            embedding=emb,
+            metadata={
+                "target_role": peer["target_role"],
+                "languages": ", ".join(peer.get("languages", [])),
+            },
+            collection_name="peer_skills",
+        )
 
 
 MATCH_PROMPT = """You are a peer matching agent for developers. Analyze the requesting user's profile against potential peer matches and provide detailed match analysis.
@@ -107,14 +158,18 @@ Skills: {matched_skills}
 Skill Gaps: {skill_gaps}
 Current Projects: {current_projects}
 
-## Potential Peers (ranked by profile similarity)
+## Potential Peers
 {peer_profiles}
+
+Each peer has a match type:
+- "similar": they are on a similar journey (same goals, overlapping skills and gaps) — good study partners and co-builders
+- "complementary": their skills cover the requesting user's skill gaps — good mentors or teammates to learn from while building
 
 ## Instructions
 For each peer, analyze:
-1. Why they're a good match (shared goals, complementary skills, similar gaps)
+1. Why they're a good match, consistent with their match type (shared goals for similar; which of the user's gaps they cover for complementary)
 2. What collaboration could look like
-3. A specific project they could build together
+3. A specific project they could build together. For complementary peers, the project should deliberately use the skills the user is missing so they learn them from the peer.
 
 Respond with ONLY raw JSON (no markdown, no backticks):
 {{
@@ -135,36 +190,90 @@ Respond with ONLY raw JSON (no markdown, no backticks):
 }}"""
 
 
-async def find_peers(github_username: str, n: int = 5) -> dict:
+async def find_peers(github_username: str, n: int = 5, mode: str = "both") -> dict:
     """Full multi-step matching pipeline:
-    1. Get user's profile and embedding
-    2. Query ChromaDB for similar peers
-    3. Enrich with SQLite profile data
+    1. Embed user's profile (similar) and/or skill gaps (complementary)
+    2. Query ChromaDB: profile vs peer_profiles, gaps vs peer_skills
+    3. Merge, tag match_type, enrich with SQLite profile data
     4. GPT-4o-mini analyzes and ranks matches
+
+    Modes: "similar" | "complementary" | "both"
     """
     settings = get_settings()
     user = get_peer(github_username)
     if not user:
         return {"error": "User not registered. Run an analysis first."}
+    if mode not in ("similar", "complementary", "both"):
+        mode = "both"
 
-    # Step 1: Get user's embedding
-    profile_text = _build_profile_text(user)
+    want_similar = mode in ("similar", "both")
+    want_complementary = mode in ("complementary", "both") and user.get("skill_gaps")
+
+    # Step 1: Embed the query texts (one batched call)
+    texts, kinds = [], []
+    if want_similar:
+        texts.append(_build_profile_text(user))
+        kinds.append("similar")
+    if want_complementary:
+        texts.append(_build_gaps_text(user))
+        kinds.append("complementary")
+    if not texts:
+        return {"matches": [], "message": "No skill gaps on record — run an analysis first."}
+
     try:
-        embedding = await _get_embedding(profile_text)
+        if want_complementary:
+            await _backfill_skills_embeddings()
+        embeddings = await _get_embeddings(texts)
     except Exception as e:
         return {"error": f"Embedding failed: {e}"}
 
-    # Step 2: Query ChromaDB for similar peers
-    candidates = query_similar(embedding, n=n, exclude_user=github_username)
-    if not candidates:
+    # Step 2: Query the right collection per kind.
+    # NOTE: scores from the two collections are not comparable (profile-vs-profile
+    # runs higher than gaps-vs-skills), so we merge by per-list rank, not raw score.
+    result_lists: dict[str, list[dict]] = {}
+    for kind, emb in zip(kinds, embeddings):
+        collection = "peer_profiles" if kind == "similar" else "peer_skills"
+        results = query_similar(
+            emb, n=n, exclude_user=github_username, collection_name=collection
+        )
+        for c in results:
+            c["match_type"] = kind
+        result_lists[kind] = results
+
+    # Dedupe peers appearing in both lists: keep the kind where they rank better
+    # (tie → complementary, since covering a gap is the more actionable signal).
+    if len(result_lists) == 2:
+        sim_rank = {c["github_username"]: i for i, c in enumerate(result_lists["similar"])}
+        comp_rank = {c["github_username"]: i for i, c in enumerate(result_lists["complementary"])}
+        dupes = set(sim_rank) & set(comp_rank)
+        for uname in dupes:
+            drop_kind = "complementary" if sim_rank[uname] < comp_rank[uname] else "similar"
+            result_lists[drop_kind] = [
+                c for c in result_lists[drop_kind] if c["github_username"] != uname
+            ]
+
+    # Interleave (complementary first) so "both" always shows a mix
+    ranked = []
+    lists = [result_lists.get("complementary", []), result_lists.get("similar", [])]
+    i = 0
+    while len(ranked) < n and any(lists):
+        for lst in lists:
+            if i < len(lst) and len(ranked) < n:
+                ranked.append(lst[i])
+        if i >= max(len(l) for l in lists):
+            break
+        i += 1
+
+    if not ranked:
         return {"matches": [], "message": "No peers in the pool yet. Be the first!"}
 
     # Step 3: Enrich candidates with full profile data
     enriched = []
-    for c in candidates:
+    for c in ranked:
         peer = get_peer(c["github_username"])
         if peer:
             peer["similarity_score"] = round(c["similarity"], 3)
+            peer["match_type"] = c["match_type"]
             enriched.append(peer)
 
     if not enriched:
@@ -174,7 +283,7 @@ async def find_peers(github_username: str, n: int = 5) -> dict:
     peer_lines = []
     for p in enriched:
         peer_lines.append(
-            f"- {p['github_username']} (similarity: {p['similarity_score']})\n"
+            f"- {p['github_username']} (match type: {p['match_type']}, similarity: {p['similarity_score']})\n"
             f"  Role: {p['target_role']}\n"
             f"  Languages: {', '.join(p.get('languages', []))}\n"
             f"  Topics: {', '.join(p.get('topics', []))}\n"
@@ -226,6 +335,7 @@ async def find_peers(github_username: str, n: int = 5) -> dict:
             "matched_skills": p.get("matched_skills", []),
             "skill_gaps": p.get("skill_gaps", []),
             "similarity_score": p.get("similarity_score", 0),
+            "match_type": p.get("match_type", "similar"),
             "match_reason": llm_data.get("match_reason", "Similar profile and goals."),
             "collaboration_type": llm_data.get("collaboration_type", "co-builder"),
             "suggested_project": llm_data.get("suggested_project", {}),
@@ -236,6 +346,7 @@ async def find_peers(github_username: str, n: int = 5) -> dict:
     return {
         "user": github_username,
         "target_role": user["target_role"],
+        "mode": mode,
         "matches": final_matches,
         "pool_size": len(get_all_peers()),
     }

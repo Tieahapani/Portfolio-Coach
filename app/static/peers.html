@@ -150,6 +150,41 @@
       border-color: var(--text-muted);
       box-shadow: 0 0 0 3px rgba(0,0,0,0.03);
     }
+    .form-group select {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 0.92rem;
+      font-family: var(--font);
+      cursor: pointer;
+    }
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--text-muted);
+    }
+    .match-type-badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-left: 0.5rem;
+    }
+    .match-type-badge.similar {
+      background: var(--accent-light);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+    }
+    .match-type-badge.complementary {
+      background: var(--warm-light);
+      color: var(--warm);
+      border: 1px solid var(--warm-border);
+    }
     .btn {
       padding: 0.75rem 1.5rem;
       background: var(--text);
@@ -457,6 +492,14 @@
         <label>Your GitHub Username</label>
         <input type="text" id="searchUsername" placeholder="Enter your GitHub username" required>
       </div>
+      <div class="form-group" style="flex: 0 0 220px;">
+        <label>Match Type</label>
+        <select id="matchMode">
+          <option value="both">Both</option>
+          <option value="similar">Similar journey</option>
+          <option value="complementary">Complements my gaps</option>
+        </select>
+      </div>
       <button class="btn" id="searchBtn" onclick="searchPeers()">Find Peers</button>
     </div>
   </div>
@@ -569,8 +612,10 @@
         loadingStep.textContent = matchSteps[i];
       }, 2000);
 
+      const mode = document.getElementById('matchMode').value;
+
       try {
-        const res = await fetch(`/api/peers/match/${encodeURIComponent(username)}`);
+        const res = await fetch(`/api/peers/match/${encodeURIComponent(username)}?mode=${mode}`);
         clearInterval(interval);
         loadingSection.classList.remove('active');
 
@@ -604,6 +649,9 @@
         ${matches.map(m => {
           const sp = m.suggested_project || {};
           const simPct = Math.round((m.similarity_score || 0) * 100);
+          const mt = m.match_type === 'complementary'
+            ? '<span class="match-type-badge complementary">Complements you</span>'
+            : '<span class="match-type-badge similar">Similar journey</span>';
 
           return `
             <div class="peer-card">
@@ -611,6 +659,7 @@
                 <div class="peer-identity">
                   <h3>${esc(m.github_username)}
                     <span class="collab-badge">${esc(m.collaboration_type || 'co-builder')}</span>
+                    ${mt}
                   </h3>
                   <div class="peer-role">${esc(m.target_role)}</div>
                 </div>

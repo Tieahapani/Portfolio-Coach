@@ -377,9 +377,9 @@ async def peer_register(req: dict):
 
 
 @app.get("/api/peers/match/{username}")
-async def peer_match(username: str):
-    """Find matching peers for a user."""
-    result = await find_peers(username)
+async def peer_match(username: str, mode: str = "both"):
+    """Find matching peers for a user. mode: similar | complementary | both"""
+    result = await find_peers(username, mode=mode)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result

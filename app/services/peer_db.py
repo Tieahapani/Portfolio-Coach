@@ -48,11 +48,11 @@ def _get_db() -> sqlite3.Connection:
     return conn
 
 
-def _get_chroma():
+def _get_chroma(name: str = "peer_profiles"):
     CHROMA_PATH.mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=str(CHROMA_PATH))
     collection = client.get_or_create_collection(
-        name="peer_profiles",
+        name=name,
         metadata={"hnsw:space": "cosine"},
     )
     return collection
@@ -149,9 +149,14 @@ def get_peer_count() -> int:
     return count
 
 
-def store_embedding(github_username: str, embedding: list[float], metadata: dict):
+def store_embedding(
+    github_username: str,
+    embedding: list[float],
+    metadata: dict,
+    collection_name: str = "peer_profiles",
+):
     """Store or update a peer's embedding in ChromaDB."""
-    collection = _get_chroma()
+    collection = _get_chroma(collection_name)
     collection.upsert(
         ids=[github_username.lower()],
         embeddings=[embedding],
@@ -159,9 +164,20 @@ def store_embedding(github_username: str, embedding: list[float], metadata: dict
     )
 
 
-def query_similar(embedding: list[float], n: int = 10, exclude_user: str = "") -> list[dict]:
+def get_embedded_ids(collection_name: str = "peer_profiles") -> set[str]:
+    """Return the set of usernames that have an embedding in a collection."""
+    collection = _get_chroma(collection_name)
+    return set(collection.get(include=[])["ids"])
+
+
+def query_similar(
+    embedding: list[float],
+    n: int = 10,
+    exclude_user: str = "",
+    collection_name: str = "peer_profiles",
+) -> list[dict]:
     """Find the n most similar peers by cosine similarity."""
-    collection = _get_chroma()
+    collection = _get_chroma(collection_name)
     total = collection.count()
     if total == 0:
         return []
