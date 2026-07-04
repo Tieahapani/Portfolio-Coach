@@ -4,15 +4,13 @@
 3. Retrieval modes:
    - similar:        user's profile embedding vs peer_profiles (same journey)
    - complementary:  user's skill GAPS embedding vs peer_skills (they know what you lack)
-   - both:           mix of the two
 4. Gemini 2.5 Flash analyzes matches, explains reasoning, suggests collab projects
 """
 
-import json
 from cachetools import TTLCache
 from openai import AsyncOpenAI
 from app.config import get_settings
-from app.services.recommender import GEMINI_BASE_URL
+from app.services.recommender import GEMINI_BASE_URL, _parse_json
 from app.services.peer_db import (
     upsert_peer, get_peer, store_embedding, query_similar, get_all_peers,
     get_embedded_ids,
@@ -201,79 +199,45 @@ Respond with ONLY raw JSON (no markdown, no backticks):
 }}"""
 
 
-async def find_peers(github_username: str, n: int = 5, mode: str = "both") -> dict:
+async def find_peers(github_username: str, n: int = 5, mode: str = "similar") -> dict:
     """Full multi-step matching pipeline:
-    1. Embed user's profile (similar) and/or skill gaps (complementary)
-    2. Query ChromaDB: profile vs peer_profiles, gaps vs peer_skills
-    3. Merge, tag match_type, enrich with SQLite profile data
+    1. Embed user's profile (similar) or skill gaps (complementary)
+    2. Query ChromaDB: profile vs peer_profiles, or gaps vs peer_skills
+    3. Tag match_type, enrich with SQLite profile data
     4. Gemini 2.5 Flash analyzes and ranks matches
 
-    Modes: "similar" | "complementary" | "both"
+    Modes: "similar" | "complementary"
     """
     settings = get_settings()
     user = get_peer(github_username)
     if not user:
         return {"error": "User not registered. Run an analysis first."}
-    if mode not in ("similar", "complementary", "both"):
-        mode = "both"
+    if mode not in ("similar", "complementary"):
+        mode = "similar"
 
-    want_similar = mode in ("similar", "both")
-    want_complementary = mode in ("complementary", "both") and user.get("skill_gaps")
-
-    # Step 1: Embed the query texts (one batched call)
-    texts, kinds = [], []
-    if want_similar:
-        texts.append(_build_profile_text(user))
-        kinds.append("similar")
-    if want_complementary:
-        texts.append(_build_gaps_text(user))
-        kinds.append("complementary")
-    if not texts:
-        return {"matches": [], "message": "No skill gaps on record — run an analysis first."}
+    # Step 1: Embed the query text
+    if mode == "similar":
+        query_text = _build_profile_text(user)
+        collection = "peer_profiles"
+    else:
+        if not user.get("skill_gaps"):
+            return {"matches": [], "message": "No skill gaps on record — run an analysis first."}
+        query_text = _build_gaps_text(user)
+        collection = "peer_skills"
 
     try:
-        if want_complementary:
+        if mode == "complementary":
             await _backfill_skills_embeddings()
-        embeddings = await _get_embeddings(texts)
+        embeddings = await _get_embeddings([query_text])
     except Exception as e:
         return {"error": f"Embedding failed: {e}"}
 
-    # Step 2: Query the right collection per kind.
-    # NOTE: scores from the two collections are not comparable (profile-vs-profile
-    # runs higher than gaps-vs-skills), so we merge by per-list rank, not raw score.
-    result_lists: dict[str, list[dict]] = {}
-    for kind, emb in zip(kinds, embeddings):
-        collection = "peer_profiles" if kind == "similar" else "peer_skills"
-        results = query_similar(
-            emb, n=n, exclude_user=github_username, collection_name=collection
-        )
-        for c in results:
-            c["match_type"] = kind
-        result_lists[kind] = results
-
-    # Dedupe peers appearing in both lists: keep the kind where they rank better
-    # (tie → complementary, since covering a gap is the more actionable signal).
-    if len(result_lists) == 2:
-        sim_rank = {c["github_username"]: i for i, c in enumerate(result_lists["similar"])}
-        comp_rank = {c["github_username"]: i for i, c in enumerate(result_lists["complementary"])}
-        dupes = set(sim_rank) & set(comp_rank)
-        for uname in dupes:
-            drop_kind = "complementary" if sim_rank[uname] < comp_rank[uname] else "similar"
-            result_lists[drop_kind] = [
-                c for c in result_lists[drop_kind] if c["github_username"] != uname
-            ]
-
-    # Interleave (complementary first) so "both" always shows a mix
-    ranked = []
-    lists = [result_lists.get("complementary", []), result_lists.get("similar", [])]
-    i = 0
-    while len(ranked) < n and any(lists):
-        for lst in lists:
-            if i < len(lst) and len(ranked) < n:
-                ranked.append(lst[i])
-        if i >= max(len(l) for l in lists):
-            break
-        i += 1
+    # Step 2: Query the matching collection
+    ranked = query_similar(
+        embeddings[0], n=n, exclude_user=github_username, collection_name=collection
+    )
+    for c in ranked:
+        c["match_type"] = mode
 
     if not ranked:
         return {"matches": [], "message": "No peers in the pool yet. Be the first!"}
@@ -323,11 +287,13 @@ async def find_peers(github_username: str, n: int = 5, mode: str = "both") -> di
             model="gemini-2.5-flash",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.5,
-            max_tokens=4000,
+            max_tokens=8000,
+            reasoning_effort="none",  # disable thinking: tokens count against max_tokens
         )
         text = response.choices[0].message.content or ""
-        cleaned = text.replace("```json", "").replace("```", "").strip()
-        llm_result = json.loads(cleaned)
+        llm_result = _parse_json(text)
+        if llm_result is None:
+            raise ValueError(f"Unparseable LLM output: {text[:200]}")
     except Exception as e:
         print(f"LLM match analysis failed: {e}")
         # Fallback: return raw similarity matches without LLM analysis

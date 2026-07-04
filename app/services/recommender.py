@@ -129,6 +129,7 @@ async def generate_recommendations(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=8000,
+            reasoning_effort="none",  # disable thinking: tokens count against max_tokens
         )
         text = response.choices[0].message.content or ""
         result = _parse_json(text)
