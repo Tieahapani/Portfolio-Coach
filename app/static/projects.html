@@ -224,6 +224,11 @@
       color: var(--text-secondary);
     }
     .link-row button:hover { border-color: var(--text-muted); color: var(--text); }
+    .link-row .browse-link {
+      align-self: center;
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
 
     .card-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
     .action-btn {
@@ -414,10 +419,12 @@
             </div>
           ` : `
             <div class="repo-info">
-              Create a repo named <code>${esc(p.suggested_repo_name)}</code> on GitHub and we'll detect it automatically on your next visit.
+              Create a repo named <code>${esc(p.suggested_repo_name)}</code> and we'll detect it automatically on your next visit.
+              <a href="https://github.com/new?name=${encodeURIComponent(p.suggested_repo_name)}&description=${encodeURIComponent(p.title)}" target="_blank">Create it on GitHub &#8599;</a>
               <div class="link-row">
-                <input type="text" id="linkInput-${p.id}" placeholder="...or link an existing repo name">
+                <input type="text" id="linkInput-${p.id}" placeholder="...or paste a repo URL / name to link">
                 <button onclick="linkRepo(${p.id})">Link</button>
+                <a class="browse-link" href="https://github.com/${esc(p.github_username)}?tab=repositories" target="_blank" title="Open your GitHub repos to copy a URL">Browse my repos &#8599;</a>
               </div>
             </div>
           `}
@@ -432,9 +439,18 @@
       }).join('');
     }
 
+    function parseRepoName(value) {
+      // Accepts: full URL (https://github.com/user/repo), user/repo, or plain repo name
+      let v = value.trim().replace(/\.git$/, '').replace(/\/+$/, '');
+      const urlMatch = v.match(/github\.com\/[^\/]+\/([^\/?#]+)/i);
+      if (urlMatch) return urlMatch[1];
+      if (v.includes('/')) return v.split('/').pop();
+      return v;
+    }
+
     async function linkRepo(id) {
       const input = document.getElementById('linkInput-' + id);
-      const repo = input.value.trim();
+      const repo = parseRepoName(input.value);
       if (!repo) return;
       try {
         const res = await fetch(`/api/projects/${id}/link`, {
