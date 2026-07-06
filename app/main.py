@@ -47,6 +47,11 @@ from app.services.tracker import (
 )
 from app.services.peer_matching import register_peer, find_peers
 from app.services.peer_db import get_peer, get_peer_count
+from app.services.project_db import (
+    add_project, get_project, update_project, delete_project,
+)
+from app.services.project_tracking import slugify_title, refresh_projects
+from app.services.progress_agent import coach_project
 from app.services.auth import (
     exchange_code_for_user, upsert_user, get_user,
     update_user_profile, create_token, verify_token,
@@ -129,6 +134,11 @@ async def tracker_page():
 @app.get("/peers", response_class=FileResponse)
 async def peers_page():
     return FileResponse(STATIC_DIR / "peers.html")
+
+
+@app.get("/projects", response_class=FileResponse)
+async def projects_page():
+    return FileResponse(STATIC_DIR / "projects.html")
 
 
 # ── Auth ──
@@ -398,6 +408,75 @@ async def peer_profile(username: str):
 async def peer_list():
     """Get peer pool stats."""
     return {"pool_size": get_peer_count()}
+
+
+# ── Tracked Projects ──
+
+@app.post("/api/projects/accept")
+async def project_accept(req: dict):
+    """Accept a recommended project: store it and suggest a repo name."""
+    try:
+        title = req["title"]
+        project = add_project(
+            github_username=req["github_username"],
+            title=title,
+            description=req.get("description", ""),
+            tech_stack=req.get("tech_stack", []),
+            skills_gained=req.get("skills_gained", []),
+            difficulty=req.get("difficulty", "Intermediate"),
+            suggested_repo_name=slugify_title(title),
+        )
+        return {"status": "tracking", "project": project}
+    except KeyError as e:
+        raise HTTPException(status_code=422, detail=f"Missing field: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not track project: {e}")
+
+
+@app.get("/api/projects/{username}")
+async def project_list(username: str):
+    """List a user's tracked projects, refreshing repo detection + activity."""
+    return {"projects": await refresh_projects(username)}
+
+
+@app.post("/api/projects/{project_id}/link")
+async def project_link(project_id: int, req: dict):
+    """Manually link a repo to a tracked project."""
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    repo = (req.get("repo_name") or "").strip().strip("/")
+    if not repo:
+        raise HTTPException(status_code=422, detail="repo_name required")
+    return {"project": update_project(project_id, linked_repo=repo)}
+
+
+@app.post("/api/projects/{project_id}/complete")
+async def project_complete(project_id: int):
+    """Mark a tracked project as completed."""
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"project": update_project(project_id, status="completed")}
+
+
+@app.post("/api/projects/{project_id}/coach")
+async def project_coach(project_id: int):
+    """Run the Progress Coach agent on a tracked project."""
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not project.get("linked_repo"):
+        raise HTTPException(status_code=400, detail="No repo linked yet — create the suggested repo first")
+    return {"coaching": await coach_project(project), "project": project}
+
+
+@app.delete("/api/projects/{project_id}")
+async def project_delete(project_id: int):
+    """Stop tracking a project."""
+    if not delete_project(project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"status": "deleted"}
 
 
 # ── Run ──

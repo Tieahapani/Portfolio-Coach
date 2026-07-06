@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Projects — Portfolio Coach</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #fafaf8;
+      --surface: #ffffff;
+      --surface-alt: #f3f2ef;
+      --border: #e8e6e1;
+      --border-light: #f0eeea;
+      --text: #2c2c2c;
+      --text-secondary: #6b6b6b;
+      --text-muted: #9a9a9a;
+      --accent: #6b7c6e;
+      --accent-light: rgba(107, 124, 110, 0.08);
+      --accent-border: rgba(107, 124, 110, 0.18);
+      --warm: #a89880;
+      --warm-light: rgba(168, 152, 128, 0.08);
+      --gap-bg: rgba(180, 120, 100, 0.06);
+      --gap-color: #9e6e58;
+      --gap-border: rgba(180, 120, 100, 0.15);
+      --match-bg: rgba(107, 124, 110, 0.06);
+      --match-color: #5a7a5e;
+      --match-border: rgba(107, 124, 110, 0.15);
+      --radius: 14px;
+      --radius-sm: 10px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+      --shadow: 0 2px 8px rgba(0,0,0,0.06);
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.5rem 2rem;
+    }
+    .logo {
+      font-family: 'Fraunces', serif;
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: -0.3px;
+    }
+    .nav-links { display: flex; gap: 2rem; align-items: center; }
+    .nav-links a {
+      text-decoration: none;
+      color: var(--text-secondary);
+      font-size: 0.88rem;
+      font-weight: 500;
+      transition: color 0.2s;
+      letter-spacing: 0.2px;
+    }
+    .nav-links a:hover, .nav-links a.active { color: var(--text); }
+
+    .page-header {
+      max-width: 760px;
+      margin: 3rem auto 2rem;
+      padding: 0 2rem;
+    }
+    .page-header h1 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.8rem;
+      font-weight: 400;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.4rem;
+    }
+    .page-header p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; }
+
+    .search-container { max-width: 760px; margin: 0 auto 2rem; padding: 0 2rem; }
+    .search-card {
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 1.5rem 2rem;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-end;
+    }
+    .search-card .form-group { flex: 1; }
+    .form-group label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 0.92rem;
+      font-family: var(--font);
+    }
+    .form-group input:focus { outline: none; border-color: var(--text-muted); }
+    .btn {
+      padding: 0.75rem 1.6rem;
+      background: var(--text);
+      color: var(--bg);
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.5; cursor: default; }
+
+    .results { max-width: 760px; margin: 0 auto 4rem; padding: 0 2rem; }
+    .message-box {
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 2rem;
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      display: none;
+    }
+
+    .project-card {
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 1.6rem 2rem;
+      margin-bottom: 1.2rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .project-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .project-top h3 { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.2px; }
+    .badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.25rem 0.7rem;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+    .badge.waiting { background: var(--warm-light); color: var(--warm); border: 1px solid var(--gap-border); }
+    .badge.not_started { background: var(--surface-alt); color: var(--text-muted); border: 1px solid var(--border); }
+    .badge.active { background: var(--match-bg); color: var(--match-color); border: 1px solid var(--match-border); }
+    .badge.stalled { background: var(--gap-bg); color: var(--gap-color); border: 1px solid var(--gap-border); }
+    .badge.completed { background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent-border); }
+
+    .project-desc { color: var(--text-secondary); font-size: 0.86rem; line-height: 1.6; margin: 0.7rem 0; }
+    .tech-stack { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.8rem; }
+    .tech-tag {
+      padding: 0.2rem 0.55rem;
+      background: var(--surface-alt);
+      border-radius: 6px;
+      font-size: 0.74rem;
+      color: var(--text-secondary);
+    }
+
+    .repo-info {
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      padding: 0.8rem 1rem;
+      background: var(--surface-alt);
+      border-radius: var(--radius-sm);
+      margin-bottom: 0.9rem;
+      line-height: 1.6;
+    }
+    .repo-info code {
+      background: var(--surface);
+      padding: 0.1rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+    .repo-info a { color: var(--accent); font-weight: 600; text-decoration: none; }
+    .repo-info a:hover { text-decoration: underline; }
+
+    .link-row { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+    .link-row input {
+      flex: 1;
+      padding: 0.5rem 0.8rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-family: var(--font);
+    }
+    .link-row button {
+      padding: 0.5rem 0.9rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font);
+      color: var(--text-secondary);
+    }
+    .link-row button:hover { border-color: var(--text-muted); color: var(--text); }
+
+    .card-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+    .action-btn {
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+      transition: all 0.2s;
+    }
+    .action-btn:hover { border-color: var(--text-muted); color: var(--text); }
+    .action-btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .action-btn.primary:hover { opacity: 0.85; }
+    .action-btn:disabled { opacity: 0.5; cursor: default; }
+
+    .coach-panel {
+      margin-top: 1rem;
+      padding: 1.2rem 1.4rem;
+      background: var(--accent-light);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-sm);
+      font-size: 0.86rem;
+      line-height: 1.6;
+      display: none;
+    }
+    .coach-panel h4 {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+    .coach-panel .progress-bar {
+      height: 6px;
+      background: var(--surface);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 0.5rem 0 0.9rem;
+    }
+    .coach-panel .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+    .coach-panel ul { margin: 0.4rem 0 0.8rem 1.2rem; }
+    .coach-panel li { margin-bottom: 0.3rem; color: var(--text-secondary); }
+    .coach-panel .verdict { font-style: italic; color: var(--text-secondary); }
+
+    @media (max-width: 600px) {
+      .search-card { flex-direction: column; align-items: stretch; }
+      .page-header h1 { font-size: 1.5rem; }
+      nav { padding: 1rem 1.2rem; }
+      .nav-links { gap: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="/" class="logo">Portfolio Coach</a>
+    <div class="nav-links">
+      <a href="/analyze">Analyze</a>
+      <a href="/tracker">Tracker</a>
+      <a href="/projects" class="active">Projects</a>
+      <a href="/peers">Peers</a>
+      <a href="/auth/login" id="authLink" style="color:var(--accent);font-weight:600">Sign in with GitHub</a>
+    </div>
+  </nav>
+
+  <div class="page-header">
+    <h1>My Projects</h1>
+    <p>Projects you've committed to building from your analysis. Create the suggested repo and we'll detect it automatically — then track your commits and get coaching on what to build next.</p>
+  </div>
+
+  <div class="search-container">
+    <div class="search-card">
+      <div class="form-group">
+        <label>Your GitHub Username</label>
+        <input type="text" id="username" placeholder="Enter your GitHub username">
+      </div>
+      <button class="btn" id="loadBtn" onclick="loadProjects()">Load Projects</button>
+    </div>
+  </div>
+
+  <div class="results">
+    <div class="message-box" id="messageBox"></div>
+    <div id="projectList"></div>
+  </div>
+
+  <script>
+    const messageBox = document.getElementById('messageBox');
+    const projectList = document.getElementById('projectList');
+
+    // Auth: auto-fill username and load
+    (async () => {
+      try {
+        const resp = await fetch('/auth/me');
+        const data = await resp.json();
+        if (data.authenticated && data.user) {
+          const u = data.user;
+          document.getElementById('username').value = u.github_username || '';
+          const authLink = document.getElementById('authLink');
+          authLink.textContent = u.name || u.github_username;
+          authLink.href = '/auth/logout';
+          authLink.style.color = 'var(--text)';
+          loadProjects();
+        }
+      } catch (e) {}
+    })();
+
+    function esc(str) {
+      if (!str) return '';
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function showMessage(text) {
+      projectList.innerHTML = '';
+      messageBox.style.display = 'block';
+      messageBox.textContent = text;
+    }
+
+    const BADGES = {
+      accepted: ['waiting', 'Waiting for repo'],
+      not_started: ['not_started', 'Not started'],
+      active: ['active', 'Active'],
+      stalled: ['stalled', 'Stalled'],
+      completed: ['completed', 'Completed'],
+    };
+
+    function timeAgo(iso) {
+      if (!iso) return '';
+      const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+      if (days === 0) return 'today';
+      if (days === 1) return 'yesterday';
+      return days + ' days ago';
+    }
+
+    let _username = '';
+
+    async function loadProjects() {
+      const username = document.getElementById('username').value.trim();
+      if (!username) return;
+      _username = username;
+      const btn = document.getElementById('loadBtn');
+      btn.disabled = true;
+      btn.textContent = 'Checking GitHub...';
+      messageBox.style.display = 'none';
+
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(username)}`);
+        const data = await res.json();
+        render(data.projects || []);
+      } catch (e) {
+        showMessage('Could not load projects. Try again.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Load Projects';
+      }
+    }
+
+    function render(projects) {
+      if (!projects.length) {
+        showMessage('No tracked projects yet. Run an analysis and click "Build this" on a recommendation.');
+        return;
+      }
+      messageBox.style.display = 'none';
+      projectList.innerHTML = projects.map(p => {
+        const [badgeClass, badgeText] = BADGES[p.status] || BADGES.accepted;
+        const linked = !!p.linked_repo;
+        return `
+        <div class="project-card" id="card-${p.id}">
+          <div class="project-top">
+            <h3>${esc(p.title)}</h3>
+            <div class="badges">
+              <span class="badge ${badgeClass}">${badgeText}</span>
+            </div>
+          </div>
+          <p class="project-desc">${esc(p.description)}</p>
+          <div class="tech-stack">${(p.tech_stack || []).map(t => `<span class="tech-tag">${esc(t)}</span>`).join('')}</div>
+
+          ${linked ? `
+            <div class="repo-info">
+              <a href="https://github.com/${esc(p.github_username)}/${esc(p.linked_repo)}" target="_blank">${esc(p.github_username)}/${esc(p.linked_repo)}</a>
+              &middot; ${p.commit_count || 0} commit${p.commit_count === 1 ? '' : 's'} since accepting
+              ${p.last_commit_at ? `&middot; last commit ${timeAgo(p.last_commit_at)}` : ''}
+            </div>
+          ` : `
+            <div class="repo-info">
+              Create a repo named <code>${esc(p.suggested_repo_name)}</code> on GitHub and we'll detect it automatically on your next visit.
+              <div class="link-row">
+                <input type="text" id="linkInput-${p.id}" placeholder="...or link an existing repo name">
+                <button onclick="linkRepo(${p.id})">Link</button>
+              </div>
+            </div>
+          `}
+
+          <div class="card-actions">
+            ${linked && p.status !== 'completed' ? `<button class="action-btn primary" id="coachBtn-${p.id}" onclick="coachMe(${p.id})">Coach me</button>` : ''}
+            ${p.status !== 'completed' ? `<button class="action-btn" onclick="markComplete(${p.id})">Mark complete</button>` : ''}
+            <button class="action-btn" onclick="removeProject(${p.id})">Remove</button>
+          </div>
+          <div class="coach-panel" id="coach-${p.id}"></div>
+        </div>`;
+      }).join('');
+    }
+
+    async function linkRepo(id) {
+      const input = document.getElementById('linkInput-' + id);
+      const repo = input.value.trim();
+      if (!repo) return;
+      try {
+        const res = await fetch(`/api/projects/${id}/link`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo_name: repo }),
+        });
+        if (!res.ok) throw new Error();
+        loadProjects();
+      } catch (e) {
+        input.value = '';
+        input.placeholder = 'Failed — check the repo name';
+      }
+    }
+
+    async function coachMe(id) {
+      const btn = document.getElementById('coachBtn-' + id);
+      const panel = document.getElementById('coach-' + id);
+      btn.disabled = true;
+      btn.textContent = 'Inspecting your repo...';
+      panel.style.display = 'block';
+      panel.innerHTML = '<h4>Progress Coach</h4>The agent is reading your file tree, README, and commits...';
+
+      try {
+        const res = await fetch(`/api/projects/${id}/coach`, { method: 'POST' });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const c = data.coaching;
+        panel.innerHTML = `
+          <h4>Progress Coach</h4>
+          ${c.progress_pct !== null && c.progress_pct !== undefined ? `
+            <strong>${c.progress_pct}% of scope built</strong>
+            <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100, c.progress_pct)}%"></div></div>
+          ` : ''}
+          ${c.built_so_far ? `<p>${esc(c.built_so_far)}</p>` : ''}
+          ${(c.missing || []).length ? `<p style="margin-top:0.6rem"><strong>Still missing:</strong></p><ul>${c.missing.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
+          ${(c.next_commits || []).length ? `<p><strong>Your next commits:</strong></p><ul>${c.next_commits.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+          ${c.verdict ? `<p class="verdict">${esc(c.verdict)}</p>` : ''}
+        `;
+      } catch (e) {
+        panel.innerHTML = '<h4>Progress Coach</h4>Coaching failed — try again in a moment.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Coach me';
+      }
+    }
+
+    async function markComplete(id) {
+      try {
+        await fetch(`/api/projects/${id}/complete`, { method: 'POST' });
+        loadProjects();
+      } catch (e) {}
+    }
+
+    async function removeProject(id) {
+      if (!confirm('Stop tracking this project?')) return;
+      try {
+        await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+        loadProjects();
+      } catch (e) {}
+    }
+
+    document.getElementById('username').addEventListener('keydown', e => {
+      if (e.key === 'Enter') loadProjects();
+    });
+  </script>
+</body>
+</html>

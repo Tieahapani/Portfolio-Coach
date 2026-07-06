@@ -352,6 +352,34 @@
       border-top: 1px solid var(--border-light);
       line-height: 1.55;
     }
+    .track-btn {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      background: var(--text);
+      color: var(--bg);
+      border: none;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: opacity 0.2s;
+    }
+    .track-btn:hover { opacity: 0.85; }
+    .track-btn:disabled { opacity: 0.6; cursor: default; }
+    .track-hint {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+    .track-hint code {
+      background: var(--surface-alt);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+    }
+    .track-hint a { color: var(--accent); }
     .tech-stack { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.6rem; }
     .tech-tag {
       padding: 0.2rem 0.55rem;
@@ -485,6 +513,7 @@
     <div class="nav-links">
       <a href="/analyze" class="active">Analyze</a>
       <a href="/tracker">Tracker</a>
+      <a href="/projects">Projects</a>
       <a href="/peers">Peers</a>
       <a href="/auth/login" id="authLink" style="color:var(--accent);font-weight:600">Sign in with GitHub</a>
     </div>
@@ -695,7 +724,42 @@
       `;
     }
 
+    let _lastProjects = [];
+    let _analyzedUsername = '';
+
+    async function trackProject(i) {
+      const p = _lastProjects[i];
+      const btn = document.getElementById('trackBtn-' + i);
+      const hint = document.getElementById('trackHint-' + i);
+      if (!p || !_analyzedUsername) return;
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      try {
+        const res = await fetch('/api/projects/accept', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            github_username: _analyzedUsername,
+            title: p.title,
+            description: p.description || '',
+            tech_stack: p.tech_stack || [],
+            skills_gained: p.skills_gained || [],
+            difficulty: p.difficulty || 'Intermediate',
+          }),
+        });
+        if (!res.ok) throw new Error('Request failed');
+        const out = await res.json();
+        btn.textContent = 'Tracking \u2713';
+        hint.innerHTML = `Create a repo named <code>${esc(out.project.suggested_repo_name)}</code> and we'll detect it automatically. <a href="/projects">View your projects &#8594;</a>`;
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Build this \u2192';
+        hint.textContent = 'Could not save — try again.';
+      }
+    }
+
     function showResults(data) {
+      _lastProjects = data.projects || [];
       loadingSection.classList.remove('active');
       pageHeader.style.display = 'none';
       resultsSection.classList.add('active');
@@ -729,6 +793,8 @@
                 ${(p.tech_stack || []).map(t => `<span class="tech-tag">${esc(t)}</span>`).join('')}
               </div>
               ${p.why ? `<div class="project-why">${esc(p.why)}</div>` : ''}
+              <button class="track-btn" id="trackBtn-${i}" onclick="trackProject(${i})">Build this &#8594;</button>
+              <div class="track-hint" id="trackHint-${i}"></div>
             </div>
             ${hasResources ? `
               <div class="resources-toggle" onclick="toggleResources(this)">
@@ -785,6 +851,7 @@
 
       if (!username || !role || !contact) return;
 
+      _analyzedUsername = username;
       const interval = showLoading();
 
       try {
