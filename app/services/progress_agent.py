@@ -5,9 +5,8 @@ compares what's built against the recommended project's scope, and returns
 a coaching assessment. Capped tool loop + fallback so the UI never breaks.
 """
 
-import json
-
 import httpx
+from cachetools import TTLCache
 from openai import AsyncOpenAI
 
 from app.config import get_settings
@@ -16,6 +15,9 @@ from app.services.project_tracking import _fetch_repo_commits
 from app.services.recommender import GEMINI_BASE_URL, _parse_json
 
 MAX_TOOL_ROUNDS = 6
+
+# Coach results keyed by (project_id, commit_count) — new commits bust the cache.
+_coach_cache: TTLCache = TTLCache(maxsize=200, ttl=6 * 60 * 60)
 
 
 async def _get_file_tree(username: str, repo: str) -> str:
@@ -100,6 +102,11 @@ async def coach_project(project: dict) -> dict:
     username = project["github_username"]
     repo = project["linked_repo"]
 
+    cache_key = (project["id"], project.get("commit_count", 0))
+    cached = _coach_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     async def run_tool(name: str) -> str:
         if name == "get_file_tree":
             return await _get_file_tree(username, repo)
@@ -158,6 +165,7 @@ async def coach_project(project: dict) -> dict:
             result = _parse_json(msg.content or "")
             if result:
                 result["fallback"] = False
+                _coach_cache[cache_key] = result
                 return result
             break
     except Exception as e:

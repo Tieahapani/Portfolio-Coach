@@ -202,6 +202,34 @@
     .repo-info a { color: var(--accent); font-weight: 600; text-decoration: none; }
     .repo-info a:hover { text-decoration: underline; }
 
+    .create-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-top: 0.7rem;
+      padding: 0.55rem 1.1rem;
+      background: var(--text);
+      color: var(--bg) !important;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-decoration: none !important;
+      transition: opacity 0.2s;
+    }
+    .create-cta:hover { opacity: 0.85; text-decoration: none !important; }
+
+    .alt-link {
+      margin-top: 0.9rem;
+      padding-top: 0.8rem;
+      border-top: 1px dashed var(--border);
+    }
+    .alt-link-label {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+    .alt-link-label a { font-weight: 500; font-size: 0.76rem; }
+
     .link-row { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
     .link-row input {
       flex: 1;
@@ -420,11 +448,14 @@
           ` : `
             <div class="repo-info">
               Create a repo named <code>${esc(p.suggested_repo_name)}</code> and we'll detect it automatically on your next visit.
-              <a href="https://github.com/new?name=${encodeURIComponent(p.suggested_repo_name)}&description=${encodeURIComponent(p.title)}" target="_blank">Create it on GitHub &#8599;</a>
-              <div class="link-row">
-                <input type="text" id="linkInput-${p.id}" placeholder="...or paste a repo URL / name to link">
-                <button onclick="linkRepo(${p.id})">Link</button>
-                <a class="browse-link" href="https://github.com/${esc(p.github_username)}?tab=repositories" target="_blank" title="Open your GitHub repos to copy a URL">Browse my repos &#8599;</a>
+              <br>
+              <a class="create-cta" href="https://github.com/new?name=${encodeURIComponent(p.suggested_repo_name)}&description=${encodeURIComponent(p.title)}" target="_blank">Create it on GitHub &#8599;</a>
+              <div class="alt-link">
+                <div class="alt-link-label">Already building it in another repo? <a href="https://github.com/${esc(p.github_username)}?tab=repositories" target="_blank">Browse my repos &#8599;</a></div>
+                <div class="link-row">
+                  <input type="text" id="linkInput-${p.id}" placeholder="Paste a repo URL or name to link it">
+                  <button onclick="linkRepo(${p.id})">Link</button>
+                </div>
               </div>
             </div>
           `}
@@ -469,6 +500,15 @@
     async function coachMe(id) {
       const btn = document.getElementById('coachBtn-' + id);
       const panel = document.getElementById('coach-' + id);
+
+      // Already loaded once: just toggle open/closed, no refetch
+      if (panel.dataset.loaded === '1') {
+        const open = panel.style.display !== 'none';
+        panel.style.display = open ? 'none' : 'block';
+        btn.textContent = open ? 'Coach me' : 'Hide coach';
+        return;
+      }
+
       btn.disabled = true;
       btn.textContent = 'Inspecting your repo...';
       panel.style.display = 'block';
@@ -490,9 +530,11 @@
           ${(c.next_commits || []).length ? `<p><strong>Your next commits:</strong></p><ul>${c.next_commits.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
           ${c.verdict ? `<p class="verdict">${esc(c.verdict)}</p>` : ''}
         `;
+        panel.dataset.loaded = '1';
+        btn.disabled = false;
+        btn.textContent = 'Hide coach';
       } catch (e) {
         panel.innerHTML = '<h4>Progress Coach</h4>Coaching failed — try again in a moment.';
-      } finally {
         btn.disabled = false;
         btn.textContent = 'Coach me';
       }
