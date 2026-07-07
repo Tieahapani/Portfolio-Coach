@@ -32,6 +32,15 @@ def _get_db() -> sqlite3.Connection:
             UNIQUE(github_username, suggested_repo_name)
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS coach_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            commit_count INTEGER DEFAULT 0,
+            assessment TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
     # Migration for tables created before the contributors column existed
     cols = [r[1] for r in conn.execute("PRAGMA table_info(tracked_projects)")]
     if "contributors" not in cols:
@@ -140,6 +149,34 @@ def update_project(project_id: int, **fields) -> dict | None:
 def delete_project(project_id: int) -> bool:
     conn = _get_db()
     cur = conn.execute("DELETE FROM tracked_projects WHERE id = ?", (project_id,))
+    conn.execute("DELETE FROM coach_sessions WHERE project_id = ?", (project_id,))
     conn.commit()
     conn.close()
     return cur.rowcount > 0
+
+
+# ── Coach session history (lets the coach reference its last assessment) ──
+
+def save_coach_session(project_id: int, commit_count: int, assessment: dict) -> None:
+    conn = _get_db()
+    conn.execute(
+        "INSERT INTO coach_sessions (project_id, commit_count, assessment, created_at) VALUES (?, ?, ?, ?)",
+        (project_id, commit_count, json.dumps(assessment),
+         datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_last_coach_session(project_id: int) -> dict | None:
+    conn = _get_db()
+    row = conn.execute(
+        "SELECT * FROM coach_sessions WHERE project_id = ? ORDER BY id DESC LIMIT 1",
+        (project_id,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    d["assessment"] = json.loads(d["assessment"])
+    return d

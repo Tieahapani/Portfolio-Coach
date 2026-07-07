@@ -199,7 +199,7 @@ Respond with ONLY raw JSON (no markdown, no backticks):
 }}"""
 
 
-async def find_peers(github_username: str, n: int = 5, mode: str = "similar") -> dict:
+async def find_peers(github_username: str, n: int = 2, mode: str = "similar") -> dict:
     """Full multi-step matching pipeline:
     1. Embed user's profile (similar) or skill gaps (complementary)
     2. Query ChromaDB: profile vs peer_profiles, or gaps vs peer_skills

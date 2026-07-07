@@ -542,6 +542,7 @@
             <strong>${pct}% of scope built</strong>
             <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
           ` : ''}
+          ${c.since_last_time ? `<p><strong>Since last time:</strong> ${esc(c.since_last_time)}</p>` : ''}
           ${c.built_so_far ? `<p>${esc(c.built_so_far)}</p>` : ''}
           ${(c.missing || []).length ? `<p style="margin-top:0.6rem"><strong>Still missing:</strong></p><ul>${c.missing.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
           ${(c.next_commits || []).length ? `<p><strong>Your next commits:</strong></p><ul>${c.next_commits.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}

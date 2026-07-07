@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 
 from app.config import get_settings
 from app.services.github_service import _build_headers, fetch_readme
+from app.services.project_db import get_last_coach_session, save_coach_session
 from app.services.project_tracking import _fetch_repo_commits
 from app.services.recommender import GEMINI_BASE_URL, _parse_json
 
@@ -75,6 +76,7 @@ Collaborators besides {username}: {contributors}
 (If there are collaborators, judge {username}'s own contribution — the commit
 list you see is already filtered to their commits only.)
 
+{previous_assessment}
 Use your tools to inspect the repo (file tree, README, commits) and judge how much
 of the recommended scope is actually built. Be honest and specific — reference real
 files and commits you saw. Then respond with ONLY raw JSON (no markdown):
@@ -83,8 +85,18 @@ files and commits you saw. Then respond with ONLY raw JSON (no markdown):
   "built_so_far": "2-3 sentences on what exists, referencing actual files/commits",
   "missing": ["scope item not yet built", "..."],
   "next_commits": ["specific commit-sized task 1", "task 2", "task 3"],
+  "since_last_time": "1-2 sentences on what changed since your previous assessment — did they do the commits you suggested? Empty string if this is the first assessment.",
   "verdict": "1-2 sentence honest coaching assessment"
 }}"""
+
+PREVIOUS_ASSESSMENT_BLOCK = """## Your previous assessment ({date}, at {commit_count} commits)
+Progress then: {progress_pct}%
+You saw: {built_so_far}
+You told them to do next: {next_commits}
+
+Compare the repo's current state against this. Call out specifically which of your
+suggested commits they did or didn't do.
+"""
 
 
 def _fallback(project: dict) -> dict:
@@ -120,6 +132,19 @@ async def coach_project(project: dict) -> dict:
             return "\n".join(f"{c['date']}: {c['message']}" for c in commits) or "No commits."
         return f"Unknown tool: {name}"
 
+    # Coach memory: give the agent its last assessment so it can report deltas
+    prev = get_last_coach_session(project["id"])
+    prev_block = ""
+    if prev:
+        a = prev["assessment"]
+        prev_block = PREVIOUS_ASSESSMENT_BLOCK.format(
+            date=prev["created_at"][:10],
+            commit_count=prev["commit_count"],
+            progress_pct=a.get("progress_pct", "?"),
+            built_so_far=a.get("built_so_far", ""),
+            next_commits="; ".join(a.get("next_commits", [])) or "nothing specific",
+        )
+
     messages = [
         {
             "role": "user",
@@ -133,6 +158,7 @@ async def coach_project(project: dict) -> dict:
                 commit_count=project.get("commit_count", 0),
                 status=project.get("status", "unknown"),
                 contributors=", ".join(project.get("contributors") or []) or "none",
+                previous_assessment=prev_block,
             ),
         }
     ]
@@ -168,8 +194,11 @@ async def coach_project(project: dict) -> dict:
 
             result = _parse_json(msg.content or "")
             if result:
+                if not prev:  # no history — nothing to compare against
+                    result.pop("since_last_time", None)
                 result["fallback"] = False
                 _coach_cache[cache_key] = result
+                save_coach_session(project["id"], project.get("commit_count", 0), result)
                 return result
             break
     except Exception as e:
