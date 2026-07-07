@@ -10,7 +10,7 @@ from datetime import datetime, timezone, timedelta
 import httpx
 
 from app.services.github_service import _build_headers
-from app.services.project_db import get_projects, update_project
+from app.services.project_db import get_projects, get_tracked_usernames, update_project
 
 STALL_DAYS = 14
 
@@ -46,6 +46,25 @@ async def _fetch_repo_commits(username: str, repo_name: str, since_iso: str) -> 
                 "date": c.get("commit", {}).get("author", {}).get("date", ""),
             }
             for c in resp.json()
+        ]
+
+
+async def _fetch_contributors(username: str, repo_name: str) -> list[str]:
+    """Contributor logins on the repo, excluding the owner and bots."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"https://api.github.com/repos/{username}/{repo_name}/contributors",
+            params={"per_page": 20},
+            headers=_build_headers(),
+        )
+        if resp.status_code != 200:
+            return []
+        return [
+            c["login"]
+            for c in resp.json()
+            if c.get("login")
+            and c["login"].lower() != username.lower()
+            and not c["login"].endswith("[bot]")
         ]
 
 
@@ -92,6 +111,7 @@ async def refresh_projects(github_username: str) -> list[dict]:
         # Activity check on the linked repo
         try:
             commits = await _fetch_repo_commits(username, repo, project["accepted_at"])
+            contributors = await _fetch_contributors(username, repo)
             last_commit_at = commits[0]["date"] if commits else None
             status = _activity_status(len(commits), last_commit_at)
             project = update_project(
@@ -100,6 +120,7 @@ async def refresh_projects(github_username: str) -> list[dict]:
                 last_commit_at=last_commit_at,
                 status=status,
                 last_checked=now,
+                contributors=contributors,
             )
         except Exception:
             project = update_project(project["id"], last_checked=now)
@@ -107,3 +128,12 @@ async def refresh_projects(github_username: str) -> list[dict]:
         refreshed.append(project)
 
     return refreshed
+
+
+async def refresh_all_projects() -> None:
+    """Refresh every user's tracked projects (background loop)."""
+    for username in get_tracked_usernames():
+        try:
+            await refresh_projects(username)
+        except Exception as e:
+            print(f"Background refresh failed for {username}: {e}")

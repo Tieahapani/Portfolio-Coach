@@ -28,16 +28,21 @@ def _get_db() -> sqlite3.Connection:
             last_checked TEXT,
             commit_count INTEGER DEFAULT 0,
             last_commit_at TEXT,
+            contributors TEXT DEFAULT '[]',
             UNIQUE(github_username, suggested_repo_name)
         )
     """)
+    # Migration for tables created before the contributors column existed
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(tracked_projects)")]
+    if "contributors" not in cols:
+        conn.execute("ALTER TABLE tracked_projects ADD COLUMN contributors TEXT DEFAULT '[]'")
     conn.commit()
     return conn
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
     d = dict(row)
-    for field in ("tech_stack", "skills_gained"):
+    for field in ("tech_stack", "skills_gained", "contributors"):
         d[field] = json.loads(d.get(field) or "[]")
     return d
 
@@ -91,6 +96,16 @@ def get_projects(github_username: str) -> list[dict]:
     return [_row_to_dict(r) for r in rows]
 
 
+def get_tracked_usernames() -> list[str]:
+    """Distinct usernames with at least one non-completed tracked project."""
+    conn = _get_db()
+    rows = conn.execute(
+        "SELECT DISTINCT github_username FROM tracked_projects WHERE status != 'completed'"
+    ).fetchall()
+    conn.close()
+    return [r["github_username"] for r in rows]
+
+
 def get_project(project_id: int) -> dict | None:
     conn = _get_db()
     row = conn.execute(
@@ -104,8 +119,11 @@ def update_project(project_id: int, **fields) -> dict | None:
     """Update arbitrary columns (linked_repo, status, commit_count, ...)."""
     allowed = {
         "linked_repo", "status", "last_checked", "commit_count", "last_commit_at",
+        "contributors",
     }
     updates = {k: v for k, v in fields.items() if k in allowed}
+    if isinstance(updates.get("contributors"), list):
+        updates["contributors"] = json.dumps(updates["contributors"])
     if not updates:
         return get_project(project_id)
     conn = _get_db()

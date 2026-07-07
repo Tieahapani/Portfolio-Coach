@@ -71,6 +71,9 @@ Skills to gain: {skills_gained}
 
 ## Their repo
 {username}/{repo} — {commit_count} commits since accepting, status: {status}
+Collaborators besides {username}: {contributors}
+(If there are collaborators, judge {username}'s own contribution — the commit
+list you see is already filtered to their commits only.)
 
 Use your tools to inspect the repo (file tree, README, commits) and judge how much
 of the recommended scope is actually built. Be honest and specific — reference real
@@ -129,6 +132,7 @@ async def coach_project(project: dict) -> dict:
                 repo=repo,
                 commit_count=project.get("commit_count", 0),
                 status=project.get("status", "unknown"),
+                contributors=", ".join(project.get("contributors") or []) or "none",
             ),
         }
     ]

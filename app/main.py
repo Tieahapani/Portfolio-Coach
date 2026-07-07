@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -43,14 +44,29 @@ from app.services.recommender import generate_recommendations
 from app.services.peer_matching import register_peer, find_peers
 from app.services.peer_db import get_peer, get_peer_count
 from app.services.project_db import (
-    add_project, get_project, update_project, delete_project,
+    add_project, get_project, get_projects, update_project, delete_project,
 )
-from app.services.project_tracking import slugify_title, refresh_projects
+from app.services.project_tracking import (
+    slugify_title, refresh_projects, refresh_all_projects,
+)
 from app.services.progress_agent import coach_project
 from app.services.auth import (
     exchange_code_for_user, upsert_user, get_user,
     update_user_profile, create_token, verify_token,
 )
+
+
+# Background refresh of tracked projects (commits, contributors, repo detect)
+REFRESH_INTERVAL = 30 * 60  # 30 minutes
+
+
+async def _project_refresh_loop():
+    while True:
+        try:
+            await refresh_all_projects()
+        except Exception as e:
+            print(f"Project refresh loop error: {e}")
+        await asyncio.sleep(REFRESH_INTERVAL)
 
 
 @asynccontextmanager
@@ -66,7 +82,9 @@ async def lifespan(app: FastAPI):
     if not settings.has_openai:
         print("⚠️  WARNING: No OPENAI_API_KEY configured in .env")
 
+    refresh_task = asyncio.create_task(_project_refresh_loop())
     yield
+    refresh_task.cancel()
 
 
 app = FastAPI(
@@ -368,8 +386,20 @@ async def project_accept(req: dict):
 
 @app.get("/api/projects/{username}")
 async def project_list(username: str):
-    """List a user's tracked projects, refreshing repo detection + activity."""
-    return {"projects": await refresh_projects(username)}
+    """List a user's tracked projects.
+
+    Served from SQLite (the background loop refreshes every 30 min). A live
+    GitHub check only runs when a project is still waiting for repo
+    auto-detection or has never been checked — that's when freshness matters.
+    """
+    projects = get_projects(username)
+    needs_live_check = any(
+        p["status"] != "completed" and (not p.get("linked_repo") or not p.get("last_checked"))
+        for p in projects
+    )
+    if needs_live_check:
+        projects = await refresh_projects(username)
+    return {"projects": projects}
 
 
 @app.post("/api/projects/{project_id}/link")

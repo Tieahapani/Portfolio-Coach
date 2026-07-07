@@ -489,6 +489,7 @@
               <a href="https://github.com/${esc(p.github_username)}/${esc(p.linked_repo)}" target="_blank">${esc(p.github_username)}/${esc(p.linked_repo)}</a>
               &middot; ${p.commit_count || 0} commit${p.commit_count === 1 ? '' : 's'} since accepting
               ${p.last_commit_at ? `&middot; last commit ${timeAgo(p.last_commit_at)}` : ''}
+              ${(p.contributors || []).length ? `&middot; built with ${p.contributors.map(c => `<a href="https://github.com/${esc(c)}" target="_blank">@${esc(c)}</a>`).join(', ')}` : ''}
             </div>
           ` : `
             <div class="repo-info">
