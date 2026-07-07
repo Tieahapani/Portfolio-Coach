@@ -309,42 +309,6 @@
     .message-box a { color: var(--accent); font-weight: 600; text-decoration: none; }
     .message-box a:hover { text-decoration: underline; }
 
-    /* ── React stats strip ── */
-    .stats-strip {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 0.8rem;
-      margin-bottom: 1.5rem;
-    }
-    .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-sm);
-      padding: 0.9rem 1rem;
-      text-align: center;
-      box-shadow: var(--shadow-sm);
-    }
-    .stat-value {
-      font-family: 'Fraunces', serif;
-      font-size: 1.5rem;
-      font-weight: 600;
-      letter-spacing: -0.5px;
-    }
-    .stat-label {
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.7px;
-      color: var(--text-muted);
-      margin-top: 0.2rem;
-    }
-    .stat-card.good .stat-value { color: var(--match-color); }
-    .stat-card.warn .stat-value { color: var(--gap-color); }
-    .stat-card.accent .stat-value { color: var(--accent); }
-    @media (max-width: 600px) {
-      .stats-strip { grid-template-columns: repeat(2, 1fr); }
-    }
-
     @media (max-width: 600px) {
       .search-card { flex-direction: column; align-items: stretch; }
       .page-header h1 { font-size: 1.5rem; }
@@ -381,7 +345,6 @@
   </div>
 
   <div class="results">
-    <div id="statsRoot"></div>
     <div class="message-box" id="messageBox"></div>
     <div id="projectList"></div>
   </div>
@@ -460,10 +423,6 @@
     }
 
     function render(projects) {
-      // Feed the React stats strip (stash in case Babel hasn't finished yet)
-      window._statsData = projects;
-      if (window.renderProgressStats) window.renderProgressStats(projects);
-
       if (!projects.length) {
         showMessage('');
         messageBox.innerHTML = 'No tracked projects yet. <a href="/analyze">Run an analysis &rarr;</a> and click "Build this" on a recommendation.';
@@ -606,10 +565,5 @@
     });
   </script>
 
-  <!-- React stats strip (CDN, no build step) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script type="text/babel" src="/static/js/progress-stats.jsx"></script>
 </body>
 </html>

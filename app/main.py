@@ -9,7 +9,6 @@ load_dotenv()  # make .env vars visible to os.getenv (e.g. PHOENIX_*)
 from fastapi import FastAPI, HTTPException, Request, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from openinference.instrumentation.openai import OpenAIInstrumentor
 from openinference.instrumentation.google_genai import GoogleGenAIInstrumentor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -104,8 +103,6 @@ app.add_middleware(
 
 
 STATIC_DIR = Path(__file__).parent / "static"
-
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", response_class=FileResponse)
@@ -404,14 +401,17 @@ async def project_list(username: str):
 
 @app.post("/api/projects/{project_id}/link")
 async def project_link(project_id: int, req: dict):
-    """Manually link a repo to a tracked project."""
+    """Manually link a repo to a tracked project, then refresh it immediately
+    so status, commits, and contributors update without waiting for the loop."""
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     repo = (req.get("repo_name") or "").strip().strip("/")
     if not repo:
         raise HTTPException(status_code=422, detail="repo_name required")
-    return {"project": update_project(project_id, linked_repo=repo)}
+    update_project(project_id, linked_repo=repo)
+    await refresh_projects(project["github_username"])
+    return {"project": get_project(project_id)}
 
 
 @app.post("/api/projects/{project_id}/complete")
