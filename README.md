@@ -24,7 +24,6 @@ There's a gap between **what you build** and **what gets you hired**. Portfolio 
 | **Project Tracker** | Accept a recommended project, and the app auto-detects when you create the repo and tracks your commit activity (active / stalled / completed) |
 | **Progress Coach** | An AI agent that inspects your repo — file tree, README, commit history — and gives an honest assessment: what's built, what's missing, and your next three commits |
 | **Peer Matching** | Finds developers similar to you (accountability partners) or complementary to you (they're strong where you're weak), with a concrete collaboration project idea |
-| **Commit Tracking** | Weekly background check on whether your recent commits align with your target role's market demands |
 
 ## How It Works
 
@@ -122,9 +121,8 @@ portfolio-coach/
 │   │   ├── progress_agent.py      # Function-calling Progress Coach agent
 │   │   ├── peer_db.py             # Peer profiles (SQLite + ChromaDB)
 │   │   ├── peer_matching.py       # Vector search + match analysis
-│   │   ├── tracker.py             # Background commit alignment checks
 │   │   └── auth.py                # GitHub OAuth + JWT
-│   └── static/                    # index, analyze, tracker, peers, projects
+│   └── static/                    # index, analyze, peers, projects
 ├── requirements.txt
 └── README.md
 ```

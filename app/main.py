@@ -1,4 +1,3 @@
-import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -41,10 +40,6 @@ from app.schemas import (
 from app.services.github_service import analyze_github
 from app.services.market_research import research_market
 from app.services.recommender import generate_recommendations
-from app.services.tracker import (
-    register_user, unregister_user, get_tracked_users,
-    get_user_insights, check_user, run_tracker_cycle,
-)
 from app.services.peer_matching import register_peer, find_peers
 from app.services.peer_db import get_peer, get_peer_count
 from app.services.project_db import (
@@ -71,30 +66,7 @@ async def lifespan(app: FastAPI):
     if not settings.has_openai:
         print("⚠️  WARNING: No OPENAI_API_KEY configured in .env")
 
-    # Start background tracker (every 6 hours)
-    tracker_task = asyncio.create_task(_tracker_loop())
-    print("  Tracker: ✓ background loop started (6h interval)")
-
     yield
-
-    tracker_task.cancel()
-    try:
-        await tracker_task
-    except asyncio.CancelledError:
-        pass
-
-
-TRACKER_INTERVAL = 6 * 60 * 60  # 6 hours
-
-
-async def _tracker_loop():
-    """Background loop that checks all tracked users periodically."""
-    while True:
-        await asyncio.sleep(TRACKER_INTERVAL)
-        try:
-            await run_tracker_cycle()
-        except Exception as e:
-            print(f"Tracker cycle error: {e}")
 
 
 app = FastAPI(
@@ -323,48 +295,6 @@ async def analyze(req: AnalyzeRequest):
     )
 
 
-# ── Tracker ──
-
-@app.post("/api/tracker/register")
-async def tracker_register(username: str, target_role: str):
-    """Register a user for background commit tracking."""
-    user = register_user(username, target_role)
-    # Run first check immediately
-    insight = await check_user(username)
-    return {"user": user, "latest_insight": insight}
-
-
-@app.delete("/api/tracker/{username}")
-async def tracker_unregister(username: str):
-    """Stop tracking a user."""
-    unregister_user(username)
-    return {"status": "removed"}
-
-
-@app.get("/api/tracker")
-async def tracker_list():
-    """List all tracked users."""
-    return {"users": get_tracked_users()}
-
-
-@app.get("/api/tracker/{username}")
-async def tracker_insights(username: str):
-    """Get insights for a tracked user."""
-    data = get_user_insights(username)
-    if not data:
-        raise HTTPException(status_code=404, detail="User not tracked")
-    return data
-
-
-@app.post("/api/tracker/{username}/check")
-async def tracker_check_now(username: str):
-    """Manually trigger a check for a user."""
-    insight = await check_user(username)
-    if not insight:
-        raise HTTPException(status_code=404, detail="User not tracked or check failed")
-    return insight
-
-
 # ── Peers ──
 
 @app.post("/api/peers/register")
@@ -438,14 +368,6 @@ async def project_accept(req: dict):
 async def project_list(username: str):
     """List a user's tracked projects, refreshing repo detection + activity."""
     return {"projects": await refresh_projects(username)}
-
-
-@app.get("/api/progress/{username}")
-async def progress_overview(username: str):
-    """Combined view for the Progress page: role alignment + tracked projects."""
-    alignment = get_user_insights(username)  # None if not registered for tracking
-    projects = await refresh_projects(username)
-    return {"alignment": alignment, "projects": projects}
 
 
 @app.post("/api/projects/{project_id}/link")
