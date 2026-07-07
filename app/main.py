@@ -3,6 +3,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from cachetools import TTLCache
 from dotenv import load_dotenv
 
 load_dotenv()  # make .env vars visible to os.getenv (e.g. PHOENIX_*)
@@ -80,6 +81,8 @@ async def lifespan(app: FastAPI):
 
     if not settings.has_openai:
         print("⚠️  WARNING: No OPENAI_API_KEY configured in .env")
+    if settings.jwt_secret == "change-me-in-production":
+        print("🚨 SECURITY: JWT_SECRET is the default — sessions are forgeable. Set JWT_SECRET in .env!")
 
     refresh_task = asyncio.create_task(_project_refresh_loop())
     yield
@@ -103,6 +106,48 @@ app.add_middleware(
 
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+# ── Security helpers ──
+
+# Per-IP rate limit buckets: {bucket_name: TTLCache{ip: request_count}}
+_rate_buckets: dict[str, TTLCache] = {}
+
+
+def _rate_limit(request: Request, bucket: str, limit: int, window_min: int = 10):
+    """Raise 429 if this IP exceeded `limit` requests in the window."""
+    cache = _rate_buckets.setdefault(
+        bucket, TTLCache(maxsize=5000, ttl=window_min * 60)
+    )
+    forwarded = request.headers.get("x-forwarded-for", "")
+    ip = (forwarded.split(",")[0].strip() if forwarded
+          else (request.client.host if request.client else "unknown"))
+    count = cache.get(ip, 0) + 1
+    cache[ip] = count
+    if count > limit:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests — wait a few minutes and try again.",
+        )
+
+
+def _require_login(session: str) -> str:
+    """Return the session's github username, or 401."""
+    username = verify_token(session) if session else None
+    if not username:
+        raise HTTPException(status_code=401, detail="Sign in with GitHub to do this.")
+    return username
+
+
+def _require_project_owner(project_id: int, session: str) -> dict:
+    """Return the project if it exists and belongs to the logged-in user."""
+    username = _require_login(session)
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project["github_username"] != username.lower():
+        raise HTTPException(status_code=403, detail="This project belongs to another user.")
+    return project
 
 
 @app.get("/", response_class=FileResponse)
@@ -250,7 +295,7 @@ async def get_market_data(role: str, mode: str = "fast"):
 # ── Full Analysis (main endpoint) ──
 
 @app.post("/api/analyze", response_model=AnalysisResult)
-async def analyze(req: AnalyzeRequest):
+async def analyze(req: AnalyzeRequest, request: Request):
     """
     Full pipeline: GitHub analysis → market research → project recommendations.
 
@@ -258,6 +303,7 @@ async def analyze(req: AnalyzeRequest):
     - fast:     Single LLM call (Gemini preferred), no Indeed MCP, no READMEs
     - thorough: Parallel web + Indeed search, README analysis, separate recommendation call
     """
+    _rate_limit(request, "analyze", limit=5, window_min=10)
     settings = get_settings()
 
     if not settings.has_openai:
@@ -315,11 +361,17 @@ async def analyze(req: AnalyzeRequest):
 # ── Peers ──
 
 @app.post("/api/peers/register")
-async def peer_register(req: dict):
-    """Register or update a peer profile (called automatically after analysis)."""
+async def peer_register(req: dict, request: Request, session: str = Cookie(default="")):
+    """Register or update a peer profile (called automatically after analysis).
+
+    The username comes from the verified session — you can only register
+    yourself, not overwrite someone else's profile.
+    """
+    username = _require_login(session)
+    _rate_limit(request, "peer_register", limit=5, window_min=10)
     try:
         peer = await register_peer(
-            github_username=req["github_username"],
+            github_username=username,
             target_role=req["target_role"],
             contact=req["contact"],
             current_projects=req.get("current_projects", ""),
@@ -361,12 +413,15 @@ async def peer_list():
 # ── Tracked Projects ──
 
 @app.post("/api/projects/accept")
-async def project_accept(req: dict):
-    """Accept a recommended project: store it and suggest a repo name."""
+async def project_accept(req: dict, session: str = Cookie(default="")):
+    """Accept a recommended project: store it and suggest a repo name.
+
+    Projects are stored under the logged-in user, not a body-supplied name."""
+    username = _require_login(session)
     try:
         title = req["title"]
         project = add_project(
-            github_username=req["github_username"],
+            github_username=username,
             title=title,
             description=req.get("description", ""),
             tech_stack=req.get("tech_stack", []),
@@ -400,12 +455,10 @@ async def project_list(username: str):
 
 
 @app.post("/api/projects/{project_id}/link")
-async def project_link(project_id: int, req: dict):
+async def project_link(project_id: int, req: dict, session: str = Cookie(default="")):
     """Manually link a repo to a tracked project, then refresh it immediately
     so status, commits, and contributors update without waiting for the loop."""
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = _require_project_owner(project_id, session)
     repo = (req.get("repo_name") or "").strip().strip("/")
     if not repo:
         raise HTTPException(status_code=422, detail="repo_name required")
@@ -415,30 +468,27 @@ async def project_link(project_id: int, req: dict):
 
 
 @app.post("/api/projects/{project_id}/complete")
-async def project_complete(project_id: int):
+async def project_complete(project_id: int, session: str = Cookie(default="")):
     """Mark a tracked project as completed."""
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    _require_project_owner(project_id, session)
     return {"project": update_project(project_id, status="completed")}
 
 
 @app.post("/api/projects/{project_id}/coach")
-async def project_coach(project_id: int):
+async def project_coach(project_id: int, request: Request, session: str = Cookie(default="")):
     """Run the Progress Coach agent on a tracked project."""
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = _require_project_owner(project_id, session)
+    _rate_limit(request, "coach", limit=10, window_min=10)
     if not project.get("linked_repo"):
         raise HTTPException(status_code=400, detail="No repo linked yet — create the suggested repo first")
     return {"coaching": await coach_project(project), "project": project}
 
 
 @app.delete("/api/projects/{project_id}")
-async def project_delete(project_id: int):
+async def project_delete(project_id: int, session: str = Cookie(default="")):
     """Stop tracking a project."""
-    if not delete_project(project_id):
-        raise HTTPException(status_code=404, detail="Project not found")
+    _require_project_owner(project_id, session)
+    delete_project(project_id)
     return {"status": "deleted"}
 
 

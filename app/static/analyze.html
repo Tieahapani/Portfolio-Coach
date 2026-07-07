@@ -747,6 +747,12 @@
             difficulty: p.difficulty || 'Intermediate',
           }),
         });
+        if (res.status === 401) {
+          btn.disabled = false;
+          btn.textContent = 'Build this \u2192';
+          hint.innerHTML = '<a href="/auth/login">Sign in with GitHub</a> to track projects.';
+          return;
+        }
         if (!res.ok) throw new Error('Request failed');
         const out = await res.json();
         btn.textContent = 'Tracking \u2713';

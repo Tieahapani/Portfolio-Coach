@@ -494,6 +494,11 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ repo_name: repo }),
         });
+        if (res.status === 401 || res.status === 403) {
+          input.value = '';
+          input.placeholder = 'Sign in with GitHub first';
+          return;
+        }
         if (!res.ok) throw new Error();
         loadProjects();
       } catch (e) {
@@ -521,14 +526,21 @@
 
       try {
         const res = await fetch(`/api/projects/${id}/coach`, { method: 'POST' });
+        if (res.status === 401 || res.status === 403) {
+          panel.innerHTML = '<h4>Progress Coach</h4><a href="/auth/login">Sign in with GitHub</a> to coach your own projects.';
+          btn.disabled = false;
+          btn.textContent = 'Coach me';
+          return;
+        }
         if (!res.ok) throw new Error();
         const data = await res.json();
         const c = data.coaching;
+        const pct = Number.isFinite(Number(c.progress_pct)) ? Math.max(0, Math.min(100, Number(c.progress_pct))) : null;
         panel.innerHTML = `
           <h4>Progress Coach</h4>
-          ${c.progress_pct !== null && c.progress_pct !== undefined ? `
-            <strong>${c.progress_pct}% of scope built</strong>
-            <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100, c.progress_pct)}%"></div></div>
+          ${pct !== null ? `
+            <strong>${pct}% of scope built</strong>
+            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
           ` : ''}
           ${c.built_so_far ? `<p>${esc(c.built_so_far)}</p>` : ''}
           ${(c.missing || []).length ? `<p style="margin-top:0.6rem"><strong>Still missing:</strong></p><ul>${c.missing.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
@@ -547,7 +559,8 @@
 
     async function markComplete(id) {
       try {
-        await fetch(`/api/projects/${id}/complete`, { method: 'POST' });
+        const res = await fetch(`/api/projects/${id}/complete`, { method: 'POST' });
+        if (res.status === 401 || res.status === 403) { alert('Sign in with GitHub to manage your projects.'); return; }
         loadProjects();
       } catch (e) {}
     }
@@ -555,7 +568,8 @@
     async function removeProject(id) {
       if (!confirm('Stop tracking this project?')) return;
       try {
-        await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+        if (res.status === 401 || res.status === 403) { alert('Sign in with GitHub to manage your projects.'); return; }
         loadProjects();
       } catch (e) {}
     }
