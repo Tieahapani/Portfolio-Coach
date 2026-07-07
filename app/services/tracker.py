@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -15,7 +16,11 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-DATA_FILE = Path(__file__).parent.parent.parent / "data" / "tracked_users.json"
+# Legacy JSON store — migrated into SQLite on first DB access, then renamed .bak
+LEGACY_JSON = Path(__file__).parent.parent.parent / "data" / "tracked_users.json"
+DB_PATH = Path(__file__).parent.parent.parent / "data" / "peers.db"
+
+MAX_INSIGHTS = 10
 
 ALIGNMENT_PROMPT = """You are a career coach analyzing a developer's recent GitHub activity against their target role.
 
@@ -42,50 +47,158 @@ Respond with ONLY raw JSON (no markdown, no backticks):
 }}"""
 
 
-def _load_data() -> dict:
-    """Load tracked users from JSON file."""
-    if DATA_FILE.exists():
-        return json.loads(DATA_FILE.read_text())
-    return {"users": {}}
+def _get_db() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tracked_users (
+            username TEXT PRIMARY KEY,
+            display_username TEXT NOT NULL,
+            target_role TEXT NOT NULL,
+            registered_at TEXT NOT NULL,
+            last_checked TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tracker_insights (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            checked_at TEXT NOT NULL,
+            payload TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    _migrate_legacy_json(conn)
+    return conn
 
 
-def _save_data(data: dict) -> None:
-    """Save tracked users to JSON file."""
-    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    DATA_FILE.write_text(json.dumps(data, indent=2, default=str))
+def _migrate_legacy_json(conn: sqlite3.Connection) -> None:
+    """One-time import of the old tracked_users.json, then rename it to .bak."""
+    if not LEGACY_JSON.exists():
+        return
+    try:
+        data = json.loads(LEGACY_JSON.read_text())
+        for key, user in data.get("users", {}).items():
+            conn.execute(
+                """INSERT OR IGNORE INTO tracked_users
+                   (username, display_username, target_role, registered_at, last_checked)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    key,
+                    user.get("username", key),
+                    user.get("target_role", ""),
+                    user.get("registered_at", datetime.now(timezone.utc).isoformat()),
+                    user.get("last_checked"),
+                ),
+            )
+            # insights are stored newest-first in the JSON; keep that order
+            for insight in reversed(user.get("insights", [])[:MAX_INSIGHTS]):
+                conn.execute(
+                    "INSERT INTO tracker_insights (username, checked_at, payload) VALUES (?, ?, ?)",
+                    (key, insight.get("checked_at", ""), json.dumps(insight)),
+                )
+        conn.commit()
+        LEGACY_JSON.rename(LEGACY_JSON.with_suffix(".json.bak"))
+        logger.info(f"Migrated {len(data.get('users', {}))} tracked users from JSON to SQLite")
+    except Exception as e:
+        logger.error(f"Tracker JSON migration failed: {e}")
+
+
+def _user_row_to_dict(row: sqlite3.Row) -> dict:
+    return {
+        "username": row["display_username"],
+        "target_role": row["target_role"],
+        "registered_at": row["registered_at"],
+        "last_checked": row["last_checked"],
+    }
+
+
+def _fetch_insights(conn: sqlite3.Connection, username_key: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT payload FROM tracker_insights WHERE username = ? ORDER BY id DESC LIMIT ?",
+        (username_key, MAX_INSIGHTS),
+    ).fetchall()
+    return [json.loads(r["payload"]) for r in rows]
 
 
 def register_user(username: str, target_role: str) -> dict:
-    """Register a user for commit tracking."""
-    data = _load_data()
-    data["users"][username.lower()] = {
-        "username": username,
-        "target_role": target_role,
-        "registered_at": datetime.now(timezone.utc).isoformat(),
-        "last_checked": None,
-        "insights": [],
-    }
-    _save_data(data)
-    return data["users"][username.lower()]
+    """Register a user for commit tracking (re-registering updates the role)."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _get_db()
+    conn.execute(
+        """INSERT INTO tracked_users (username, display_username, target_role, registered_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(username) DO UPDATE SET target_role = excluded.target_role""",
+        (username.lower(), username, target_role, now),
+    )
+    conn.commit()
+    conn.close()
+    user = get_user_insights(username)
+    return user
 
 
 def unregister_user(username: str) -> None:
     """Remove a user from tracking."""
-    data = _load_data()
-    data["users"].pop(username.lower(), None)
-    _save_data(data)
+    conn = _get_db()
+    conn.execute("DELETE FROM tracked_users WHERE username = ?", (username.lower(),))
+    conn.execute("DELETE FROM tracker_insights WHERE username = ?", (username.lower(),))
+    conn.commit()
+    conn.close()
 
 
 def get_tracked_users() -> list[dict]:
-    """Get all tracked users."""
-    data = _load_data()
-    return list(data["users"].values())
+    """Get all tracked users (without insight history)."""
+    conn = _get_db()
+    rows = conn.execute("SELECT * FROM tracked_users").fetchall()
+    conn.close()
+    return [_user_row_to_dict(r) for r in rows]
 
 
 def get_user_insights(username: str) -> dict | None:
-    """Get a specific user's tracking data and insights."""
-    data = _load_data()
-    return data["users"].get(username.lower())
+    """Get a user's tracking data with their insight history (newest first)."""
+    conn = _get_db()
+    row = conn.execute(
+        "SELECT * FROM tracked_users WHERE username = ?", (username.lower(),)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    user = _user_row_to_dict(row)
+    user["insights"] = _fetch_insights(conn, username.lower())
+    conn.close()
+    return user
+
+
+def _touch_last_checked(username_key: str, checked_at: str) -> None:
+    conn = _get_db()
+    conn.execute(
+        "UPDATE tracked_users SET last_checked = ? WHERE username = ?",
+        (checked_at, username_key),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _save_insight(username_key: str, insight: dict) -> None:
+    """Store an insight, trim history to MAX_INSIGHTS, update last_checked."""
+    conn = _get_db()
+    conn.execute(
+        "INSERT INTO tracker_insights (username, checked_at, payload) VALUES (?, ?, ?)",
+        (username_key, insight.get("checked_at", ""), json.dumps(insight)),
+    )
+    conn.execute(
+        """DELETE FROM tracker_insights WHERE username = ? AND id NOT IN (
+               SELECT id FROM tracker_insights WHERE username = ? ORDER BY id DESC LIMIT ?
+           )""",
+        (username_key, username_key, MAX_INSIGHTS),
+    )
+    conn.execute(
+        "UPDATE tracked_users SET last_checked = ? WHERE username = ?",
+        (insight.get("checked_at"), username_key),
+    )
+    conn.commit()
+    conn.close()
 
 
 async def fetch_recent_commits(username: str) -> list[dict]:
@@ -248,8 +361,7 @@ async def check_user(username: str) -> dict | None:
     from app.services.github_service import analyze_github
     from app.services.market_research import research_market
 
-    data = _load_data()
-    user = data["users"].get(username.lower())
+    user = get_user_insights(username)
     if not user:
         return None
 
@@ -271,9 +383,7 @@ async def check_user(username: str) -> dict | None:
         and last_insight.get("commit_hash") == commit_hash
         and last_insight.get("target_role") == target_role
     ):
-        user["last_checked"] = datetime.now(timezone.utc).isoformat()
-        data["users"][username.lower()] = user
-        _save_data(data)
+        _touch_last_checked(username.lower(), datetime.now(timezone.utc).isoformat())
         return last_insight
 
     profile = await analyze_github(username, fetch_readmes=False)
@@ -297,19 +407,14 @@ async def check_user(username: str) -> dict | None:
     insight["commit_hash"] = commit_hash
     insight["target_role"] = target_role
 
-    user["last_checked"] = insight["checked_at"]
-    # Keep last 10 insights
-    user["insights"] = [insight] + user.get("insights", [])[:9]
-    data["users"][username.lower()] = user
-    _save_data(data)
+    _save_insight(username.lower(), insight)
 
     return insight
 
 
 async def run_tracker_cycle() -> None:
     """Check all registered users. Called by background loop."""
-    data = _load_data()
-    users = list(data["users"].values())
+    users = get_tracked_users()
 
     if not users:
         return

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Projects — Portfolio Coach</title>
+  <title>Progress — Portfolio Coach</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127793;</text></svg>">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -306,6 +306,96 @@
     .coach-panel li { margin-bottom: 0.3rem; color: var(--text-secondary); }
     .coach-panel .verdict { font-style: italic; color: var(--text-secondary); }
 
+    /* ── Role alignment banner ── */
+    .alignment-banner {
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 1.4rem 2rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow-sm);
+      display: none;
+      font-size: 0.86rem;
+      line-height: 1.6;
+    }
+    .alignment-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.6rem;
+    }
+    .alignment-title {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .alignment-score { font-weight: 600; font-size: 0.95rem; }
+    .alignment-bar {
+      height: 6px;
+      background: var(--surface-alt);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 0.4rem 0 0.9rem;
+    }
+    .alignment-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+    .alignment-banner p { color: var(--text-secondary); margin-bottom: 0.4rem; }
+    .alignment-banner .nudge { color: var(--text); }
+    .gap-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.5rem 0; }
+    .gap-chip {
+      padding: 0.2rem 0.6rem;
+      background: var(--gap-bg);
+      color: var(--gap-color);
+      border: 1px solid var(--gap-border);
+      border-radius: 6px;
+      font-size: 0.74rem;
+    }
+    .alignment-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 0.8rem;
+      padding-top: 0.8rem;
+      border-top: 1px dashed var(--border);
+    }
+    .alignment-footer .meta { font-size: 0.76rem; color: var(--text-muted); }
+    .signup-row { display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap; }
+    .signup-row input {
+      flex: 1;
+      min-width: 200px;
+      padding: 0.55rem 0.9rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.84rem;
+      font-family: var(--font);
+    }
+    .signup-row input:focus { outline: none; border-color: var(--text-muted); }
+    .mini-btn {
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font);
+      border: 1px solid var(--text);
+      background: var(--text);
+      color: var(--bg);
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+    .mini-btn:hover { opacity: 0.85; }
+    .mini-btn:disabled { opacity: 0.5; cursor: default; }
+    .mini-btn.ghost { background: var(--surface); color: var(--text-secondary); border-color: var(--border); }
+    .mini-btn.ghost:hover { border-color: var(--text-muted); color: var(--text); }
+    .message-box a { color: var(--accent); font-weight: 600; text-decoration: none; }
+    .message-box a:hover { text-decoration: underline; }
+
     @media (max-width: 600px) {
       .search-card { flex-direction: column; align-items: stretch; }
       .page-header h1 { font-size: 1.5rem; }
@@ -320,16 +410,15 @@
     <a href="/" class="logo">Portfolio Coach</a>
     <div class="nav-links">
       <a href="/analyze">Analyze</a>
-      <a href="/tracker">Tracker</a>
-      <a href="/projects" class="active">Projects</a>
+      <a href="/projects" class="active">Progress</a>
       <a href="/peers">Peers</a>
       <a href="/auth/login" id="authLink" style="color:var(--accent);font-weight:600">Sign in with GitHub</a>
     </div>
   </nav>
 
   <div class="page-header">
-    <h1>My Projects</h1>
-    <p>Projects you've committed to building from your analysis. Create the suggested repo and we'll detect it automatically — then track your commits and get coaching on what to build next.</p>
+    <h1>My Progress</h1>
+    <p>One place to answer "am I on track?" — your overall commit alignment with your target role at the top, and the specific projects you've committed to building below.</p>
   </div>
 
   <div class="search-container">
@@ -338,11 +427,12 @@
         <label>Your GitHub Username</label>
         <input type="text" id="username" placeholder="Enter your GitHub username">
       </div>
-      <button class="btn" id="loadBtn" onclick="loadProjects()">Load Projects</button>
+      <button class="btn" id="loadBtn" onclick="loadProjects()">Load Progress</button>
     </div>
   </div>
 
   <div class="results">
+    <div class="alignment-banner" id="alignmentBanner"></div>
     <div class="message-box" id="messageBox"></div>
     <div id="projectList"></div>
   </div>
@@ -409,20 +499,102 @@
       messageBox.style.display = 'none';
 
       try {
-        const res = await fetch(`/api/projects/${encodeURIComponent(username)}`);
+        const res = await fetch(`/api/progress/${encodeURIComponent(username)}`);
         const data = await res.json();
+        renderAlignment(data.alignment);
         render(data.projects || []);
       } catch (e) {
-        showMessage('Could not load projects. Try again.');
+        showMessage('Could not load your progress. Try again.');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Load Projects';
+        btn.textContent = 'Load Progress';
+      }
+    }
+
+    // ── Role alignment banner ──
+
+    function renderAlignment(alignment) {
+      const banner = document.getElementById('alignmentBanner');
+      banner.style.display = 'block';
+
+      if (!alignment) {
+        // Not registered for role tracking yet — inline signup
+        banner.innerHTML = `
+          <div class="alignment-top">
+            <span class="alignment-title">Role Alignment</span>
+          </div>
+          <p>Get a recurring read on whether your recent commits — across <em>all</em> your repos — match what employers want for your target role.</p>
+          <div class="signup-row">
+            <input type="text" id="roleInput" placeholder="Target role, e.g. AI Engineer Intern">
+            <button class="mini-btn" id="startTrackingBtn" onclick="startTracking()">Start tracking</button>
+          </div>`;
+        return;
+      }
+
+      const insight = (alignment.insights || [])[0];
+      if (!insight || insight.status === 'no_commits') {
+        banner.innerHTML = `
+          <div class="alignment-top">
+            <span class="alignment-title">Role Alignment</span>
+            <span class="alignment-score">${esc(alignment.target_role)}</span>
+          </div>
+          <p>No alignment check yet${insight && insight.status === 'no_commits' ? ' — no recent commits found' : ''}. Run one now to see how your recent work matches the market.</p>
+          <div class="signup-row">
+            <button class="mini-btn" id="checkNowBtn" onclick="checkNow()">Check now</button>
+          </div>`;
+        return;
+      }
+
+      const pct = Math.round((insight.alignment_score || 0) * 100);
+      banner.innerHTML = `
+        <div class="alignment-top">
+          <span class="alignment-title">Role Alignment &middot; ${esc(alignment.target_role)}</span>
+          <span class="alignment-score">${pct}% aligned</span>
+        </div>
+        <div class="alignment-bar"><div class="alignment-fill" style="width:${Math.min(100, pct)}%"></div></div>
+        ${insight.recent_focus ? `<p><strong>Recent focus:</strong> ${esc(insight.recent_focus)}</p>` : ''}
+        ${insight.nudge ? `<p class="nudge"><strong>Nudge:</strong> ${esc(insight.nudge)}</p>` : ''}
+        ${(insight.gaps || []).length ? `<div class="gap-chips">${insight.gaps.map(g => `<span class="gap-chip">${esc(g)}</span>`).join('')}</div>` : ''}
+        <div class="alignment-footer">
+          <span class="meta">Based on ${insight.commit_count || 0} recent commits &middot; checked ${timeAgo(insight.checked_at)}</span>
+          <button class="mini-btn ghost" id="checkNowBtn" onclick="checkNow()">Check now</button>
+        </div>`;
+    }
+
+    async function startTracking() {
+      const role = (document.getElementById('roleInput').value || '').trim();
+      if (!role || !_username) return;
+      const btn = document.getElementById('startTrackingBtn');
+      btn.disabled = true;
+      btn.textContent = 'Running first check...';
+      try {
+        const res = await fetch(`/api/tracker/register?username=${encodeURIComponent(_username)}&target_role=${encodeURIComponent(role)}`, { method: 'POST' });
+        if (!res.ok) throw new Error();
+        loadProjects();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Failed — try again';
+      }
+    }
+
+    async function checkNow() {
+      const btn = document.getElementById('checkNowBtn');
+      btn.disabled = true;
+      btn.textContent = 'Checking...';
+      try {
+        const res = await fetch(`/api/tracker/${encodeURIComponent(_username)}/check`, { method: 'POST' });
+        if (!res.ok) throw new Error();
+        loadProjects();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Failed — try again';
       }
     }
 
     function render(projects) {
       if (!projects.length) {
-        showMessage('No tracked projects yet. Run an analysis and click "Build this" on a recommendation.');
+        showMessage('');
+        messageBox.innerHTML = 'No tracked projects yet. <a href="/analyze">Run an analysis &rarr;</a> and click "Build this" on a recommendation.';
         return;
       }
       messageBox.style.display = 'none';

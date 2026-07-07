@@ -126,9 +126,10 @@ async def analyze_page():
     return FileResponse(STATIC_DIR / "analyze.html")
 
 
-@app.get("/tracker", response_class=FileResponse)
+@app.get("/tracker")
 async def tracker_page():
-    return FileResponse(STATIC_DIR / "tracker.html")
+    """Old tracker page — merged into the Progress page."""
+    return RedirectResponse("/projects", status_code=301)
 
 
 @app.get("/peers", response_class=FileResponse)
@@ -437,6 +438,14 @@ async def project_accept(req: dict):
 async def project_list(username: str):
     """List a user's tracked projects, refreshing repo detection + activity."""
     return {"projects": await refresh_projects(username)}
+
+
+@app.get("/api/progress/{username}")
+async def progress_overview(username: str):
+    """Combined view for the Progress page: role alignment + tracked projects."""
+    alignment = get_user_insights(username)  # None if not registered for tracking
+    projects = await refresh_projects(username)
+    return {"alignment": alignment, "projects": projects}
 
 
 @app.post("/api/projects/{project_id}/link")
