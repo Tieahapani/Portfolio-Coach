@@ -21,9 +21,9 @@ There's a gap between **what you build** and **what gets you hired**. Portfolio 
 |---------|-------------|
 | **Portfolio Analysis** | Maps your repos, languages, and frameworks against skills employers are hiring for right now |
 | **Market Signals** | Pulls live job posting data to surface in-demand skills and trending tools for your target role |
-| **Project Tracker** | Accept a recommended project, and the app auto-detects when you create the repo and tracks your commit activity (active / stalled / completed) |
-| **Progress Coach** | An AI agent that inspects your repo — file tree, README, commit history — and gives an honest assessment: what's built, what's missing, and your next three commits |
-| **Peer Matching** | Finds developers similar to you (accountability partners) or complementary to you (they're strong where you're weak), with a concrete collaboration project idea |
+| **Project Tracker** | Accept a recommended project, and the app auto-detects when you create the repo, tracks your commit activity (active / stalled / completed), and shows who you built it with — collaborators are detected automatically |
+| **Progress Coach** | An AI agent that inspects your repo — file tree, README, commit history — and gives an honest assessment: what's built, what's missing, and your next three commits. It remembers its last assessment and tells you what changed since ("you did 2 of the 3 commits I suggested") |
+| **Peer Matching** | Finds the top 2 developers most similar to you (accountability partners) or complementary to you (they're strong where you're weak), with a concrete collaboration project idea |
 
 ## How It Works
 
@@ -38,8 +38,10 @@ You enter: GitHub username + target role (e.g. "AI Engineer Intern")
 │  3. Gemini 2.5 Flash → gap analysis + project recommendations │
 │                                                               │
 │  Accept a project → tracked in SQLite                         │
-│  Create the repo → auto-detected on your next visit           │
-│  Click "Coach me" → AI agent reads your repo and reports back │
+│  Create the repo → auto-detected, commits + collaborators     │
+│  refreshed by a background loop every 30 minutes              │
+│  Click "Coach me" → AI agent reads your repo, compares it     │
+│  against its last assessment, and reports what changed        │
 │                                                               │
 │  Peer matching → your profile is embedded as a vector and     │
 │  searched against other users (ChromaDB vector database)      │
@@ -54,9 +56,13 @@ You enter: GitHub username + target role (e.g. "AI Engineer Intern")
 
 **Peer matching is vector search, not keyword matching.** Each user's profile (skills, gaps, target role) is converted into embeddings and stored in ChromaDB. "Similar" mode searches for profiles near yours; "complementary" mode searches for people whose *skills* match your *gaps*.
 
-**No webhooks, no polling — check on page load.** Project tracking simply asks GitHub "any new commits?" when you open the Projects page. Repo creation is auto-detected by checking whether a repo matching the suggested name exists. Simple, zero infrastructure, well within GitHub's rate limits.
+**No webhooks — a background job instead.** Every 30 minutes, the app quietly checks each tracked project for new commits, newly created repos, and collaborators. That means the Progress page loads instantly from the local database instead of waiting on GitHub. The only time we check GitHub live is right after you link a repo — when freshness actually matters.
 
-**Boring, reliable persistence.** SQLite for users, peers, and tracked projects. In-memory TTL caches for expensive results (coach output is cached per commit count — a new commit automatically triggers a fresh analysis). No database server to run or break.
+**The coach has memory.** Every assessment is saved. The next time you ask for coaching, the AI sees what it told you last time and reports what actually changed — did you do the commits it suggested, or not? That turns it from a one-time reviewer into an accountability partner.
+
+**Boring, reliable persistence.** SQLite for users, peers, tracked projects, and coach history. Expensive AI results are cached and only recomputed when something changes (a new commit automatically triggers a fresh coach analysis). No database server to run or break.
+
+**You can only change your own stuff.** Any action that modifies data — tracking a project, running the coach, registering as a peer — requires signing in with GitHub, and only works on your own data. The AI features are also rate-limited, so a stranger can't run up the API bill. Login sessions are cryptographically signed so they can't be faked.
 
 **Plain HTML/JS frontend.** No React, no build step. Five static pages served directly by FastAPI. Easier to deploy, nothing to compile, and fast on a $6/month server.
 
@@ -73,6 +79,9 @@ After each deploy the site appeared down. The vector database (ChromaDB) takes s
 
 **4. A "both" mode in peer matching that tried to do too much.**
 Merging similar + complementary results in one request produced worse output than either mode alone. We removed it. Two clear modes beat one confusing one — cutting a feature was the right call.
+
+**5. Collaborator detection worked — but GitHub showed no collaborators.**
+We added "built with @user" badges by reading GitHub's contributors API, then tested on a real two-person repo and got nothing. Root cause: both developers were committing with unconfigured git emails (`user@machine.local`), so GitHub couldn't attribute the commits to any account — which also silently broke commit counting. The code was right; the data was wrong. Lesson: features that depend on external data need a test against real-world messy data, not just a clean happy path.
 
 ## Tech Stack
 
@@ -98,6 +107,7 @@ cp .env.example .env
 #   GEMINI_API_KEY  → free at aistudio.google.com
 #   OPENAI_API_KEY  → for peer-matching embeddings
 #   GITHUB_TOKEN    → raises GitHub API rate limits
+#   JWT_SECRET      → python -c "import secrets; print(secrets.token_hex(32))"
 
 uvicorn app.main:app --reload
 ```
