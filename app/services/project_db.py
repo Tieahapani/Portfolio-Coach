@@ -45,6 +45,10 @@ def _get_db() -> sqlite3.Connection:
     cols = [r[1] for r in conn.execute("PRAGMA table_info(tracked_projects)")]
     if "contributors" not in cols:
         conn.execute("ALTER TABLE tracked_projects ADD COLUMN contributors TEXT DEFAULT '[]'")
+    # Migration for coach_sessions created before the file_tree column existed
+    scols = [r[1] for r in conn.execute("PRAGMA table_info(coach_sessions)")]
+    if "file_tree" not in scols:
+        conn.execute("ALTER TABLE coach_sessions ADD COLUMN file_tree TEXT DEFAULT '[]'")
     conn.commit()
     return conn
 
@@ -157,11 +161,14 @@ def delete_project(project_id: int) -> bool:
 
 # ── Coach session history (lets the coach reference its last assessment) ──
 
-def save_coach_session(project_id: int, commit_count: int, assessment: dict) -> None:
+def save_coach_session(
+    project_id: int, commit_count: int, assessment: dict,
+    file_tree: list[str] | None = None,
+) -> None:
     conn = _get_db()
     conn.execute(
-        "INSERT INTO coach_sessions (project_id, commit_count, assessment, created_at) VALUES (?, ?, ?, ?)",
-        (project_id, commit_count, json.dumps(assessment),
+        "INSERT INTO coach_sessions (project_id, commit_count, assessment, file_tree, created_at) VALUES (?, ?, ?, ?, ?)",
+        (project_id, commit_count, json.dumps(assessment), json.dumps(file_tree or []),
          datetime.now(timezone.utc).isoformat()),
     )
     conn.commit()
@@ -179,4 +186,5 @@ def get_last_coach_session(project_id: int) -> dict | None:
         return None
     d = dict(row)
     d["assessment"] = json.loads(d["assessment"])
+    d["file_tree"] = json.loads(d.get("file_tree") or "[]")
     return d

@@ -5,6 +5,8 @@ compares what's built against the recommended project's scope, and returns
 a coaching assessment. Capped tool loop + fallback so the UI never breaks.
 """
 
+from datetime import datetime
+
 import httpx
 from cachetools import TTLCache
 from openai import AsyncOpenAI
@@ -17,12 +19,20 @@ from app.services.recommender import GEMINI_BASE_URL, _parse_json
 
 MAX_TOOL_ROUNDS = 6
 
+
+def _parse_dt(value: str) -> datetime | None:
+    """Parse an ISO timestamp (handles GitHub's trailing 'Z')."""
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+
 # Coach results keyed by (project_id, commit_count) — new commits bust the cache.
 _coach_cache: TTLCache = TTLCache(maxsize=200, ttl=6 * 60 * 60)
 
 
-async def _get_file_tree(username: str, repo: str) -> str:
-    """Repo file paths (up to 150) via the git trees API."""
+async def _get_file_paths(username: str, repo: str) -> list[str] | None:
+    """Repo file paths (up to 150) via the git trees API. None on failure."""
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             f"https://api.github.com/repos/{username}/{repo}/git/trees/HEAD",
@@ -30,9 +40,8 @@ async def _get_file_tree(username: str, repo: str) -> str:
             headers=_build_headers(),
         )
         if resp.status_code != 200:
-            return "Could not fetch file tree."
-        paths = [t["path"] for t in resp.json().get("tree", []) if t["type"] == "blob"]
-        return "\n".join(paths[:150]) or "Repo is empty."
+            return None
+        return [t["path"] for t in resp.json().get("tree", []) if t["type"] == "blob"][:150]
 
 
 TOOLS = [
@@ -94,8 +103,14 @@ Progress then: {progress_pct}%
 You saw: {built_so_far}
 You told them to do next: {next_commits}
 
-Compare the repo's current state against this. Call out specifically which of your
-suggested commits they did or didn't do.
+## Verified changes since that assessment (computed from git data — these are facts)
+New commits: {new_commits}
+Files added: {files_added}
+Files removed: {files_removed}
+
+When writing "since_last_time", base it ONLY on the verified changes above — do not
+claim any change that is not in these lists. Judge which of your suggested commits
+these verified changes cover.
 """
 
 
@@ -122,27 +137,46 @@ async def coach_project(project: dict) -> dict:
     if cached is not None:
         return cached
 
+    # Fetch git facts once, up front — reused by both the delta and the agent's tools
+    file_paths = await _get_file_paths(username, repo)
+    commits = await _fetch_repo_commits(username, repo, project["accepted_at"])
+
     async def run_tool(name: str) -> str:
         if name == "get_file_tree":
-            return await _get_file_tree(username, repo)
+            if file_paths is None:
+                return "Could not fetch file tree."
+            return "\n".join(file_paths) or "Repo is empty."
         if name == "get_readme":
             return (await fetch_readme(username, repo)) or "No README."
         if name == "get_recent_commits":
-            commits = await _fetch_repo_commits(username, repo, project["accepted_at"])
             return "\n".join(f"{c['date']}: {c['message']}" for c in commits) or "No commits."
         return f"Unknown tool: {name}"
 
-    # Coach memory: give the agent its last assessment so it can report deltas
+    # Coach memory: give the agent its last assessment plus a delta computed in
+    # code (new commits + file diff) so the "what changed" facts can't be hallucinated.
     prev = get_last_coach_session(project["id"])
     prev_block = ""
     if prev:
         a = prev["assessment"]
+        new_commits = [
+            c for c in commits
+            if _parse_dt(c["date"]) and _parse_dt(prev["created_at"])
+            and _parse_dt(c["date"]) > _parse_dt(prev["created_at"])
+        ]
+        prev_paths = set(prev.get("file_tree") or [])
+        cur_paths = set(file_paths or [])
+        # Only diff files if both snapshots exist (old sessions have no tree saved)
+        files_added = sorted(cur_paths - prev_paths) if prev_paths and file_paths is not None else []
+        files_removed = sorted(prev_paths - cur_paths) if prev_paths and file_paths is not None else []
         prev_block = PREVIOUS_ASSESSMENT_BLOCK.format(
             date=prev["created_at"][:10],
             commit_count=prev["commit_count"],
             progress_pct=a.get("progress_pct", "?"),
             built_so_far=a.get("built_so_far", ""),
             next_commits="; ".join(a.get("next_commits", [])) or "nothing specific",
+            new_commits="; ".join(f"{c['date'][:10]}: {c['message']}" for c in new_commits) or "none",
+            files_added=", ".join(files_added[:40]) or "none",
+            files_removed=", ".join(files_removed[:40]) or "none",
         )
 
     messages = [
@@ -198,7 +232,10 @@ async def coach_project(project: dict) -> dict:
                     result.pop("since_last_time", None)
                 result["fallback"] = False
                 _coach_cache[cache_key] = result
-                save_coach_session(project["id"], project.get("commit_count", 0), result)
+                save_coach_session(
+                    project["id"], project.get("commit_count", 0), result,
+                    file_tree=file_paths or [],
+                )
                 return result
             break
     except Exception as e:
