@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
@@ -64,6 +64,43 @@ class ProjectRecommendation(BaseModel):
     why: str = ""
     build_time_estimate: str = ""
     resources: list[LearningResource] = []
+
+
+class RecommendationOutput(BaseModel):
+    """Strict schema the LLM's recommendation JSON must satisfy (loop-verified)."""
+    profile_summary: str = Field(min_length=20)
+    skill_gaps: list[str] = Field(min_length=1)
+    matched_skills: list[str] = []
+    projects: list[ProjectRecommendation] = Field(min_length=2, max_length=6)
+    overall_strategy: str = Field(min_length=10)
+
+
+class MarketOutput(BaseModel):
+    """Strict schema the LLM's market research JSON must satisfy (loop-verified)."""
+    market_skills: list[str] = Field(min_length=5)
+    trending_tools: list[str] = Field(min_length=3)
+    sample_jobs: list[JobPosting] = []
+    industry_trends: str = Field(min_length=10)
+
+
+class SuggestedCollabProject(BaseModel):
+    title: str = Field(min_length=5)
+    description: str = Field(min_length=30)
+    tech_stack: list[str] = Field(min_length=1)
+
+
+class PeerMatchItem(BaseModel):
+    github_username: str
+    match_reason: str = Field(min_length=20)
+    collaboration_type: str = ""
+    suggested_project: SuggestedCollabProject
+    shared_interests: list[str] = []
+    complementary_skills: list[str] = []
+
+
+class PeerMatchOutput(BaseModel):
+    """Strict schema the LLM's peer match JSON must satisfy (loop-verified)."""
+    matches: list[PeerMatchItem] = Field(min_length=1)
 
 
 class AnalysisResult(BaseModel):

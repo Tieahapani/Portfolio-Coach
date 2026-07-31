@@ -1,9 +1,10 @@
-import json
 import asyncio
 from cachetools import TTLCache
 from google import genai
+from pydantic import ValidationError
 from app.config import get_settings
-from app.schemas import MarketData, JobPosting
+from app.schemas import MarketData, MarketOutput
+from app.services.llm_loop import _parse_json
 
 # Cache market research per role for 6 hours (max 30 roles)
 _market_cache: TTLCache = TTLCache(maxsize=30, ttl=6 * 60 * 60)
@@ -22,62 +23,65 @@ Respond with ONLY raw JSON (no markdown, no backticks, no explanation):
 }}"""
 
 
-def _parse_json(text: str) -> dict | None:
-    """Extract JSON from LLM response text."""
-    cleaned = text.replace("```json", "").replace("```", "").strip()
-    start = cleaned.find("{")
-    if start == -1:
-        return None
-    depth = 0
-    for i, ch in enumerate(cleaned[start:], start):
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(cleaned[start : i + 1])
-                except json.JSONDecodeError:
-                    return None
-    return None
+MAX_ATTEMPTS = 2  # search-grounded calls are slower, so fewer retries
 
 
-async def search_gemini(role: str) -> dict | None:
-    """Use Gemini 2.5 Flash with Google Search grounding for market research."""
+async def search_gemini(role: str, extra_instruction: str = "") -> MarketOutput | None:
+    """One search-grounded Gemini call, schema-validated. None if invalid."""
     settings = get_settings()
     client = genai.Client(api_key=settings.effective_gemini_key)
 
     response = await asyncio.to_thread(
         client.models.generate_content,
         model="gemini-2.5-flash",
-        contents=MARKET_PROMPT.format(role=role),
+        contents=MARKET_PROMPT.format(role=role) + extra_instruction,
         config={"tools": [{"google_search": {}}]},
     )
 
-    text = response.text or ""
-    return _parse_json(text)
+    raw = _parse_json(response.text or "")
+    if raw is None:
+        print("[loop:market] unparseable JSON")
+        return None
+    try:
+        return MarketOutput.model_validate(raw)
+    except ValidationError as e:
+        errors = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}"
+            for err in e.errors()[:5]
+        )
+        print(f"[loop:market] schema failed: {errors}")
+        return None
 
 
 async def research_market(role: str, mode: str = "fast") -> MarketData:
-    """Market research using Gemini 2.5 Flash with Google Search (cached 6 hours)."""
+    """Market research via a validated retry loop (cached 6 hours)."""
     cache_key = role.lower().strip()
     if cache_key in _market_cache:
         return _market_cache[cache_key]
 
-    try:
-        data = await search_gemini(role)
-    except Exception as e:
-        print(f"Market research failed: {e}")
-        data = None
+    data = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        extra = "" if attempt == 1 else (
+            "\n\nIMPORTANT: your previous answer was invalid or incomplete. "
+            "Return ONLY raw JSON with at least 12 market_skills, 6 trending_tools, "
+            "and a non-empty industry_trends summary."
+        )
+        try:
+            data = await search_gemini(role, extra)
+        except Exception as e:
+            print(f"[loop:market] attempt {attempt} failed: {e}")
+        if data:
+            break
 
     if not data:
+        # Bad market data poisons recommendations — don't cache the fallback
         return MarketData(sources=["fallback"])
 
     result = MarketData(
-        market_skills=data.get("market_skills", []),
-        trending_tools=data.get("trending_tools", []),
-        industry_trends=data.get("industry_trends", ""),
-        sample_jobs=[JobPosting(**j) for j in data.get("sample_jobs", [])],
+        market_skills=data.market_skills,
+        trending_tools=data.trending_tools,
+        industry_trends=data.industry_trends,
+        sample_jobs=data.sample_jobs,
         sources=["Gemini 2.5 Flash (Google Search)"],
     )
     _market_cache[cache_key] = result

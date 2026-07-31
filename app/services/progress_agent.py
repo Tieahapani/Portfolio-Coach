@@ -15,7 +15,7 @@ from app.config import get_settings
 from app.services.github_service import _build_headers, fetch_readme
 from app.services.project_db import get_last_coach_session, save_coach_session
 from app.services.project_tracking import _fetch_repo_commits
-from app.services.recommender import GEMINI_BASE_URL, _parse_json
+from app.services.llm_loop import GEMINI_BASE_URL, _parse_json
 
 MAX_TOOL_ROUNDS = 6
 

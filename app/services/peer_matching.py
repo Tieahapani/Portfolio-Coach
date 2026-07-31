@@ -10,7 +10,8 @@
 from cachetools import TTLCache
 from openai import AsyncOpenAI
 from app.config import get_settings
-from app.services.recommender import GEMINI_BASE_URL, _parse_json
+from app.schemas import PeerMatchOutput
+from app.services.llm_loop import call_with_verification
 from app.services.peer_db import (
     upsert_peer, get_peer, store_embedding, query_similar, get_all_peers,
     get_embedded_ids,
@@ -199,6 +200,34 @@ Respond with ONLY raw JSON (no markdown, no backticks):
 }}"""
 
 
+# Clichéd project ideas the prompt bans — enforced in code, not just asked for
+_BANNED_IDEAS = (
+    "todo app", "to-do app", "task manager", "portfolio website",
+    "e-commerce platform", "social media app", "chat app", "generic dashboard",
+)
+
+
+def _make_match_verifier(real_usernames: set[str]):
+    """Fact checks for peer match output: no invented peers, no banned clichés."""
+    def verify(out: PeerMatchOutput) -> list[str]:
+        errors = []
+        for m in out.matches:
+            if m.github_username not in real_usernames:
+                errors.append(
+                    f"'{m.github_username}' is not one of the actual peers "
+                    f"({', '.join(sorted(real_usernames))}) — only analyze real peers"
+                )
+            proj_text = f"{m.suggested_project.title} {m.suggested_project.description}".lower()
+            for banned in _BANNED_IDEAS:
+                if banned in proj_text:
+                    errors.append(
+                        f"suggested project for {m.github_username} is a banned cliché "
+                        f"('{banned}') — propose a specific project with a real dataset/API/domain"
+                    )
+        return errors[:6]
+    return verify
+
+
 async def find_peers(github_username: str, n: int = 2, mode: str = "similar") -> dict:
     """Full multi-step matching pipeline:
     1. Embed user's profile (similar) or skill gaps (complementary)
@@ -278,26 +307,16 @@ async def find_peers(github_username: str, n: int = 2, mode: str = "similar") ->
         peer_profiles="\n\n".join(peer_lines),
     )
 
-    try:
-        client = AsyncOpenAI(
-            api_key=settings.effective_gemini_key,
-            base_url=GEMINI_BASE_URL,
-        )
-        response = await client.chat.completions.create(
-            model="gemini-2.5-flash",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5,
-            max_tokens=8000,
-            reasoning_effort="low",  # small thinking budget; tokens count against max_tokens
-        )
-        text = response.choices[0].message.content or ""
-        llm_result = _parse_json(text)
-        if llm_result is None:
-            raise ValueError(f"Unparseable LLM output: {text[:200]}")
-    except Exception as e:
-        print(f"LLM match analysis failed: {e}")
-        # Fallback: return raw similarity matches without LLM analysis
-        llm_result = {"matches": []}
+    verified = await call_with_verification(
+        [{"role": "user", "content": prompt}],
+        schema=PeerMatchOutput,
+        verify=_make_match_verifier({p["github_username"] for p in enriched}),
+        label="peer_match",
+        temperature=0.5,
+        reasoning_effort="low",
+    )
+    # Fallback: return raw similarity matches without LLM analysis
+    llm_result = verified.model_dump() if verified else {"matches": []}
 
     # Merge LLM analysis with profile data
     llm_matches = {m["github_username"]: m for m in llm_result.get("matches", [])}
