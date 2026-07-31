@@ -10,3 +10,5 @@ data/*.db
 data/tracked_users.json
 *.egg-info/
 .pytest_cache/
+.DS_Store
+**/.DS_Store
