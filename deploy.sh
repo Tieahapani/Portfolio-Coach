@@ -6,10 +6,10 @@ set -e
 SERVER="root@68.183.172.77"
 KEY="$HOME/.ssh/id_ed25519_personal"
 
-# Load the SSH key if the agent doesn't have it yet
-if ! ssh-add -l 2>/dev/null | grep -q "id_ed25519_personal"; then
+# Load the SSH key only if we can't already connect
+if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$SERVER" true 2>/dev/null; then
     echo "→ Loading SSH key..."
-    ssh-add "$KEY"
+    ssh-add --apple-use-keychain "$KEY"
 fi
 
 # Warn about uncommitted changes (they won't deploy)
